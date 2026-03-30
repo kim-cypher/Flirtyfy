@@ -10,7 +10,8 @@ from django.core.cache import cache
 
 # Initialize OpenAI client
 # Get your API key from: https://platform.openai.com/api/keys
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY', 'your-api-key-here'))
+
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 
 class UniqueResponseTracker:

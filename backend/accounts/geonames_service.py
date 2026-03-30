@@ -9,7 +9,7 @@ from math import radians, sin, cos, sqrt, atan2
 
 # GeoNames API configuration
 GEONAMES_API_URL = "http://api.geonames.org/searchJSON"
-GEONAMES_USERNAME = "your-geonames-username"  # Get it from: http://www.geonames.org/user/edit
+GEONAMES_USERNAME = "flirty"  # Get it from: http://www.geonames.org/user/edit
 
 
 class GeoNamesService:
