@@ -1,43 +1,18 @@
-from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import UserProfile
-from datetime import datetime, timedelta
-from django.db import transaction
-from datetime import date
+from accounts.novelty_models import ConversationUpload, AIReply
 
-
-class UserProfileSerializer(serializers.ModelSerializer):
+class ConversationUploadSerializer(serializers.ModelSerializer):
     class Meta:
-        model = UserProfile
-        fields = ['bio', 'avatar', 'age', 'age_verified']
+        model = ConversationUpload
+        fields = ['id', 'original_text', 'created_at']
 
-
-class UserSerializer(serializers.ModelSerializer):
-    profile = UserProfileSerializer(read_only=True)
-
+class AIReplySerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'profile']
-
-
-class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True)
-    confirmPassword = serializers.CharField(write_only=True, required=True)
-    email = serializers.EmailField(required=True)
-    username = serializers.CharField(required=True)
-    date_of_birth = serializers.DateField(required=True, help_text="Format: YYYY-MM-DD")
-
-    class Meta:
-        model = User
-        fields = ['username', 'email', 'password', 'confirmPassword', 'date_of_birth']
-
-    def validate(self, data):
-        """
-        Validate passwords match and user is 18+ years old
-        """
-        # Check passwords match
-        if data['password'] != data['confirmPassword']:
-            raise serializers.ValidationError({"password": "Passwords must match."})
+        model = AIReply
+        fields = [
+            'id', 'original_text', 'normalized_text', 'embedding', 'fingerprint',
+            'summary', 'intent', 'created_at', 'expires_at', 'status', 'error'
+        ]
         
         # Check age is 18+
         date_of_birth = data.get('date_of_birth')

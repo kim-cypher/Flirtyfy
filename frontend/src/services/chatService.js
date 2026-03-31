@@ -11,11 +11,23 @@ import apiClient from './apiClient';
  * @param {string} conversation - The last 10 texts from a conversation
  * @returns {Promise} Response from OpenAI via backend
  */
-export const generateChatResponse = async (conversation) => {
+
+// Upload chat to async novelty endpoint
+export const uploadChat = async (conversation) => {
   try {
-    const response = await apiClient.post('/chat/', {
+    const response = await apiClient.post('/novelty/upload/', {
       conversation: conversation,
     });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+// Poll for latest AI reply for the user
+export const fetchLatestReply = async () => {
+  try {
+    const response = await apiClient.get('/novelty/replies/');
     return response.data;
   } catch (error) {
     throw error.response?.data || error;

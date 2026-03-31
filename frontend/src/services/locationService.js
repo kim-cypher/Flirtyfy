@@ -11,10 +11,11 @@ import apiClient from './apiClient';
  * @param {string} state - Name of the state (e.g., 'California')
  * @returns {Promise} List of cities with their details
  */
-export const searchCitiesNearState = async (state) => {
+export const searchCitiesNearState = async (city, state) => {
   try {
     const response = await apiClient.get('/locations/', {
       params: {
+        city: city,
         state: state,
       },
     });

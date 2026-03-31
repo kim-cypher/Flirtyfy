@@ -129,60 +129,33 @@ class LocationSearchView(APIView):
     
     def get(self, request):
         """
-        Search for cities within 45 minutes of a state
-        
+        Search for cities within 45 minutes of a city+state or state center.
         Query parameters:
+        - city: Name of the city (optional)
         - state: Name of the state (required)
-        
-        Response:
-        {
-            'success': bool,
-            'cities': [
-                {
-                    'name': 'City Name',
-                    'latitude': 0.0,
-                    'longitude': 0.0,
-                    'distance_km': 75.0,
-                    'population': 10000,
-                    'state': 'State Name',
-                    'country': 'Country'
-                },
-                ...
-            ],
-            'count': int,
-            'state_center': {'lat': 0.0, 'lng': 0.0}
-        }
         """
-        
         try:
-            # Get state from query parameters
-            state = request.query_params.get('state', '')
-            
-            if not state or len(state.strip()) == 0:
+            city = request.query_params.get('city', '').strip()
+            state = request.query_params.get('state', '').strip()
+            if not state:
                 return Response({
                     'success': False,
-                    'message': 'Please provide a state name. Example: ?state=California'
+                    'message': 'Please provide a state name. Example: ?state=Virginia'
                 }, status=HTTP_400_BAD_REQUEST)
-            
-            # Search for cities using GeoNames
-            result = GeoNamesService.get_cities_45_mins_away(state)
-            
+            result = GeoNamesService.get_cities_45_mins_away(city=city, state=state)
             if not result['success']:
                 return Response({
                     'success': False,
                     'message': result.get('error', 'Could not search for locations')
                 }, status=HTTP_400_BAD_REQUEST)
-            
-            # Return successful response
             return Response({
                 'success': True,
                 'cities': result['cities'],
                 'count': result['count'],
-                'state_center': result['state_center'],
+                'center': result['center'],
                 'search_radius_km': result['search_radius_km'],
-                'message': f'Found {result["count"]} cities within 45 minutes of {state}'
+                'message': f'Found {result["count"]} cities within 45 minutes of {city+", " if city else ""}{state}'
             }, status=HTTP_200_OK)
-        
         except Exception as e:
             return Response({
                 'success': False,

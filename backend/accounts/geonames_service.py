@@ -78,101 +78,115 @@ class GeoNamesService:
     }
     
     @staticmethod
-    def get_cities_45_mins_away(state_name):
+    def get_cities_45_mins_away(city=None, state=None):
         """
-        Find cities within 45 minutes (75 km) from a given state center.
-        
+        Find cities within 45 minutes (75 km) from a given city+state or state center.
         Args:
-            state_name: Name of the state (e.g., 'California', 'New York')
-        
+            city: Name of the city (optional)
+            state: Name of the state (required)
         Returns:
             {
                 'success': bool,
-                'cities': [
-                    {
-                        'name': str,
-                        'latitude': float,
-                        'longitude': float,
-                        'population': int,
-                        'distance_km': float,
-                        'state': str,
-                        'country': str
-                    },
-                    ...
-                ],
+                'cities': [...],
                 'count': int,
-                'state_center': {'lat': float, 'lng': float},
+                'center': {'lat': float, 'lng': float},
                 'search_radius_km': int
             }
         """
-        
         try:
-            # Get state coordinates
-            state_lower = state_name.lower().strip()
-            
+            if not state:
+                return {'success': False, 'error': 'State is required.'}
+            state_lower = state.lower().strip()
             if state_lower not in GeoNamesService.STATE_COORDINATES:
                 return {
                     'success': False,
-                    'error': f'State "{state_name}" not found. Please check spelling.'
+                    'error': f'State "{state}" not found. Please check spelling.'
                 }
-            
-            state_lat, state_lng = GeoNamesService.STATE_COORDINATES[state_lower]
-            
-            # Query GeoNames API for cities near the state
-            cities = GeoNamesService._query_geonames(
-                state_lat,
-                state_lng,
-                max_rows=200  # Get more results to filter
-            )
-            
+            # If city is provided, geocode it to get coordinates
+            if city and city.strip():
+                coords = GeoNamesService._geocode_city_state(city, state)
+                if not coords:
+                    return {
+                        'success': False,
+                        'error': f'Could not find city "{city}, {state}".'
+                    }
+                center_lat, center_lng = coords
+            else:
+                center_lat, center_lng = GeoNamesService.STATE_COORDINATES[state_lower]
+            # Query GeoNames API for cities near the center
+            cities = GeoNamesService._query_geonames(center_lat, center_lng, max_rows=200)
             if not cities:
                 return {
                     'success': False,
-                    'error': f'No cities found near {state_name}'
+                    'error': f'No cities found near {city+", " if city else ""}{state}'
                 }
-            
-            # Filter cities by distance (45 min = 75 km)
             filtered_cities = []
-            
-            for city in cities:
+            for city_obj in cities:
+                # Only include cities in the same state
+                city_state = city_obj.get('adminName1', '').lower()
+                if city_state != state_lower:
+                    continue
                 distance = GeoNamesService._calculate_distance(
-                    state_lat, state_lng,
-                    float(city['lat']), float(city['lng'])
+                    center_lat, center_lng,
+                    float(city_obj['lat']), float(city_obj['lng'])
                 )
-                
-                # Include cities within tolerance range
-                if (GeoNamesService.TARGET_DISTANCE_KM - GeoNamesService.TOLERANCE_KM 
-                    <= distance <= 
+                if (GeoNamesService.TARGET_DISTANCE_KM - GeoNamesService.TOLERANCE_KM
+                    <= distance <=
                     GeoNamesService.TARGET_DISTANCE_KM + GeoNamesService.TOLERANCE_KM):
-                    
                     city_info = {
-                        'name': city['name'],
-                        'latitude': float(city['lat']),
-                        'longitude': float(city['lng']),
-                        'population': int(city.get('population', 0)),
+                        'name': city_obj['name'],
+                        'latitude': float(city_obj['lat']),
+                        'longitude': float(city_obj['lng']),
+                        'population': int(city_obj.get('population', 0)),
                         'distance_km': round(distance, 2),
-                        'state': city.get('adminName1', ''),
-                        'country': city.get('countryName', '')
+                        'state': city_obj.get('adminName1', ''),
+                        'country': city_obj.get('countryName', '')
                     }
                     filtered_cities.append(city_info)
-            
-            # Sort by distance
             filtered_cities.sort(key=lambda x: x['distance_km'])
-            
+            # Return up to 10 best matches
+            filtered_cities = filtered_cities[:10]
             return {
                 'success': True,
                 'cities': filtered_cities,
                 'count': len(filtered_cities),
-                'state_center': {'lat': state_lat, 'lng': state_lng},
+                'center': {'lat': center_lat, 'lng': center_lng},
                 'search_radius_km': GeoNamesService.TARGET_DISTANCE_KM,
                 'tolerance_km': GeoNamesService.TOLERANCE_KM
             }
-        
         except Exception as e:
             return {
                 'success': False,
                 'error': str(e)
             }
+
+    @staticmethod
+    def _geocode_city_state(city, state):
+        """
+        Geocode a city+state to (lat, lng) using GeoNames API.
+        Returns (lat, lng) tuple or None.
+        """
+        try:
+            params = {
+                'q': f'{city}, {state}',
+                'maxRows': 1,
+                'featureClass': 'P',
+                'country': 'US',
+                'username': GEONAMES_USERNAME,
+                'style': 'FULL'
+            }
+            response = requests.get(GEONAMES_API_URL, params=params, timeout=5)
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            geonames = data.get('geonames', [])
+            if not geonames:
+                return None
+            lat = float(geonames[0]['lat'])
+            lng = float(geonames[0]['lng'])
+            return (lat, lng)
+        except Exception:
+            return None
     
     @staticmethod
     def _query_geonames(latitude, longitude, max_rows=100):

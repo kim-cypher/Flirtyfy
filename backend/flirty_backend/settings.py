@@ -75,17 +75,20 @@ TEMPLATES = [
 WSGI_APPLICATION = 'flirty_backend.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+
+# Environment variables
+import environ
+env = environ.Env()
+environ.Env.read_env()
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'flirty_db',
-        'USER': 'flirty_user',
-        'PASSWORD': 'flirty_password123',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': env('POSTGRES_DB', default='flirty'),
+        'USER': env('POSTGRES_USER', default='flirty'),
+        'PASSWORD': env('POSTGRES_PASSWORD', default='flirty'),
+        'HOST': env('POSTGRES_HOST', default='db'),
+        'PORT': env('POSTGRES_PORT', default='5432'),
     }
 }
 
@@ -142,18 +145,30 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Cache Configuration
-# Used for tracking response uniqueness to prevent repetition
+
+# Redis cache for production
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'flirty-cache',
-        'TIMEOUT': 2592000,  # 30 days in seconds
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': env('CELERY_BROKER_URL', default='redis://redis:6379/0'),
         'OPTIONS': {
-            'MAX_ENTRIES': 10000
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
     }
 }
+
+# Celery
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://redis:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://redis:6379/0')
+CELERY_TASK_ALWAYS_EAGER = False
+CELERY_RESULT_EXTENDED = True
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+# pgvector
+INSTALLED_APPS += ['pgvector.django', 'django_celery_results']
 
 # API Configuration
 # OpenAI API Key - Get from: https://platform.openai.com/api/keys

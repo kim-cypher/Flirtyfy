@@ -37,6 +37,7 @@ function FindLocation() {
 
   // State management
   const [selectedState, setSelectedState] = useState('');
+  const [city, setCity] = useState('');
   const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -73,30 +74,25 @@ function FindLocation() {
       setError('Please select a state');
       return;
     }
-
     setLoading(true);
     setError('');
     setCities([]);
     setSearched(true);
-
     try {
-      const result = await searchCitiesNearState(selectedState);
-
+      const result = await searchCitiesNearState(city, selectedState);
       if (result.success) {
-        // Sort results based on selected sort method
         let sortedCities = [...result.cities];
         if (sortBy === 'distance') {
-          sortedCities.sort((a, b) => a.distance - b.distance);
+          sortedCities.sort((a, b) => a.distance_km - b.distance_km);
         } else if (sortBy === 'population') {
           sortedCities.sort((a, b) => (b.population || 0) - (a.population || 0));
         }
-
         setCities(sortedCities);
-
         if (sortedCities.length === 0) {
           setError(
-            'No cities found within 45 minutes of ' + selectedState +
-            '. This might be a rural state or geographic boundary issue.'
+            'No cities found within 45 minutes of ' +
+            (city ? city + ', ' : '') + selectedState +
+            '. This might be a rural area or geographic boundary issue.'
           );
         }
       } else {
@@ -177,12 +173,20 @@ function FindLocation() {
         {/* Search Section */}
         <div className="search-section">
           <div className="search-card">
-            <h3>🔍 Select State</h3>
+            <h3>🔍 City & State Search</h3>
             <p className="section-description">
-              Choose a state to find all cities within 45 minutes (approximately 45km radius)
+              Enter a city and select a state to find all cities within 45 minutes (75km radius) of that city. If you leave city blank, it will search from the state center.
             </p>
-
             <div className="search-form">
+              <input
+                className="city-input"
+                type="text"
+                placeholder="Enter city (e.g. Falls Church)"
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                disabled={loading}
+                style={{ marginRight: '8px', minWidth: '180px' }}
+              />
               <select
                 className="state-select"
                 value={selectedState}
@@ -196,7 +200,6 @@ function FindLocation() {
                   </option>
                 ))}
               </select>
-
               <button
                 className="btn-search"
                 onClick={handleSearch}
@@ -219,7 +222,7 @@ function FindLocation() {
         {searched && cities.length > 0 && (
           <div className="results-section">
             <div className="results-header">
-              <h3>📊 Results for {selectedState}</h3>
+              <h3>📊 Results for {city ? `${city}, ` : ''}{selectedState}</h3>
               <div className="results-info">
                 <span className="result-count">
                   Found <strong>{cities.length}</strong> {cities.length === 1 ? 'city' : 'cities'}
@@ -230,7 +233,6 @@ function FindLocation() {
                 </select>
               </div>
             </div>
-
             {/* Results Table View */}
             <div className="results-table-wrapper">
               <table className="results-table">
@@ -250,9 +252,9 @@ function FindLocation() {
                         <span className="city-title">{city.name}</span>
                       </td>
                       <td className="city-distance">
-                        {city.distance.toFixed(1)} km
+                        {city.distance_km.toFixed(1)} km
                         <span className="distance-miles">
-                          ({formatDistance(city.distance)} mi)
+                          ({formatDistance(city.distance_km)} mi)
                         </span>
                       </td>
                       <td className="city-population">
@@ -268,7 +270,6 @@ function FindLocation() {
                 </tbody>
               </table>
             </div>
-
             {/* Results Card View (Mobile) */}
             <div className="results-cards">
               {cities.map((city, index) => (
@@ -281,7 +282,7 @@ function FindLocation() {
                     <div className="card-item">
                       <span className="card-label">Distance:</span>
                       <span className="card-value">
-                        {city.distance.toFixed(1)} km ({formatDistance(city.distance)} mi)
+                        {city.distance_km.toFixed(1)} km ({formatDistance(city.distance_km)} mi)
                       </span>
                     </div>
                     <div className="card-item">

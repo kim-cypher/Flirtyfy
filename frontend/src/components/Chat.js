@@ -16,7 +16,7 @@ import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../redux/actions/authActions';
-import { generateChatResponse } from '../services/chatService';
+import { uploadChat, fetchLatestReply } from '../services/chatService';
 import './Chat.css';
 
 function Chat() {
@@ -28,10 +28,13 @@ function Chat() {
   const [conversation, setConversation] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [isUnique, setIsUnique] = useState(null);
+  const [jobStatus, setJobStatus] = useState('');
   const [copied, setCopied] = useState(false);
   const [responseHistory, setResponseHistory] = useState([]);
+  const [pollInterval, setPollInterval] = useState(null);
 
   /**
    * Handle logout
@@ -58,52 +61,83 @@ function Chat() {
   /**
    * Generate AI response to the pasted conversation
    */
+  // Handle chat upload and start polling for reply
   const handleGenerateResponse = async () => {
-    // Validation
     if (!conversation.trim()) {
       setError('Please paste a conversation first');
       return;
     }
-
     if (conversation.trim().length < 10) {
       setError('Please paste a longer conversation (at least 10 characters)');
       return;
     }
-
     setLoading(true);
     setError('');
     setResponse('');
-
+    setIsUnique(null);
+    setJobStatus('');
+    setProcessing(false);
     try {
-      const result = await generateChatResponse(conversation);
-
-      if (result.success) {
-        // Set the response and uniqueness status
-        setResponse(result.response);
-        setIsUnique(result.is_unique);
-
-        // Add to history
-        setResponseHistory([
-          ...responseHistory,
-          {
-            conversation: conversation,
-            response: result.response,
-            isUnique: result.is_unique,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-        ]);
-
-        // Clear conversation for next input
-        setConversation('');
-      } else {
-        setError(result.message || 'Failed to generate response');
-      }
-    } catch (err) {
-      setError(
-        err.message || 'Error: Could not connect to the server. Please check your internet connection.'
-      );
-    } finally {
+      // Upload chat to backend
+      await uploadChat(conversation);
+      setProcessing(true);
       setLoading(false);
+      setJobStatus('pending');
+      // Start polling for reply
+      const interval = setInterval(async () => {
+        try {
+          const replyData = await fetchLatestReply();
+          if (replyData && replyData.length > 0) {
+            const latest = replyData[0];
+            setJobStatus(latest.status || '');
+            if (latest.status === 'complete' && latest.reply) {
+              setResponse(latest.reply);
+              setIsUnique(latest.is_unique);
+              setProcessing(false);
+              setJobStatus('complete');
+              setResponseHistory([
+                ...responseHistory,
+                {
+                  conversation: conversation,
+                  response: latest.reply,
+                  isUnique: latest.is_unique,
+                  timestamp: new Date().toLocaleTimeString(),
+                },
+              ]);
+              setConversation('');
+              clearInterval(interval);
+              setPollInterval(null);
+            } else if (latest.status === 'fallback' && latest.reply) {
+              setResponse(latest.reply);
+              setIsUnique(latest.is_unique);
+              setProcessing(false);
+              setJobStatus('fallback');
+              setResponseHistory([
+                ...responseHistory,
+                {
+                  conversation: conversation,
+                  response: latest.reply,
+                  isUnique: latest.is_unique,
+                  timestamp: new Date().toLocaleTimeString(),
+                },
+              ]);
+              setConversation('');
+              clearInterval(interval);
+              setPollInterval(null);
+            }
+          }
+        } catch (err) {
+          setError('Error polling for reply.');
+          setProcessing(false);
+          clearInterval(interval);
+          setPollInterval(null);
+        }
+      }, 2000); // Poll every 2 seconds
+      setPollInterval(interval);
+    } catch (err) {
+      setError(err.message || 'Error: Could not connect to the server.');
+      setLoading(false);
+      setProcessing(false);
     }
   };
 
@@ -126,6 +160,12 @@ function Chat() {
     setResponse('');
     setIsUnique(null);
     setError('');
+    setJobStatus('');
+    setProcessing(false);
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      setPollInterval(null);
+    }
     // Focus on textarea so user can immediately paste next conversation
     document.getElementById('conversationInput').focus();
   };
@@ -193,9 +233,9 @@ function Chat() {
             <button
               className="btn-generate"
               onClick={handleGenerateResponse}
-              disabled={loading || !conversation.trim()}
+              disabled={loading || processing || !conversation.trim()}
             >
-              {loading ? '⏳ Generating...' : '✨ Generate Reply'}
+              {loading ? '⏳ Uploading...' : processing ? '⏳ Processing...' : '✨ Generate Reply'}
             </button>
 
             {/* Tips Section */}
@@ -220,7 +260,18 @@ function Chat() {
               </div>
             )}
 
-            {response && (
+            {/* Processing/Waiting State */}
+            {processing && (
+              <div className="processing-state">
+                <span className="processing-spinner">⏳</span>
+                <span className="processing-text">Waiting for AI reply...</span>
+                {jobStatus && (
+                  <span className="job-status">Status: {jobStatus}</span>
+                )}
+              </div>
+            )}
+
+            {response && !processing && (
               <div className="response-container">
                 {/* Uniqueness Badge */}
                 <div className={`uniqueness-badge ${isUnique ? 'unique' : 'rephrased'}`}>
