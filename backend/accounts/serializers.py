@@ -1,7 +1,26 @@
+class AIReplyFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIReplyFeedback
+        fields = ['id', 'user', 'reply', 'reason', 'created_at']
+        read_only_fields = ['user', 'created_at']
 from rest_framework import serializers
 from accounts.novelty_models import ConversationUpload, AIReply
 
 class ConversationUploadSerializer(serializers.ModelSerializer):
+        def validate_original_text(self, value):
+            # Enforce length limits
+            if not (10 <= len(value.strip()) <= 2000):
+                raise serializers.ValidationError("Conversation text must be between 10 and 2000 characters.")
+            # Disallow dangerous characters (basic injection prevention)
+            import re
+            if re.search(r'[<>\{\}\[\]\\]', value):
+                raise serializers.ValidationError("Invalid characters detected in conversation text.")
+            # Basic profanity filter (expand as needed)
+            profanity = [r'fuck', r'shit', r'bitch', r'cunt', r'nigger', r'faggot', r'whore', r'slut', r'rape', r'kill', r'suicide']
+            for word in profanity:
+                if re.search(word, value, re.IGNORECASE):
+                    raise serializers.ValidationError("Inappropriate language detected. Please rephrase.")
+            return value
     class Meta:
         model = ConversationUpload
         fields = ['id', 'original_text', 'created_at']

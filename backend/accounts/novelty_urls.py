@@ -1,3 +1,5 @@
+from accounts.novelty_views import AIReplyFeedbackView
+    path('feedback/', AIReplyFeedbackView.as_view(), name='ai-reply-feedback'),
 from django.urls import path
 from accounts.novelty_views import ConversationUploadView, AIReplyListView
 

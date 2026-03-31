@@ -1,3 +1,8 @@
+class AIReplyFeedback(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_feedbacks')
+    reply = models.ForeignKey(AIReply, on_delete=models.CASCADE, related_name='feedbacks')
+    reason = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)
 from django.db import models
 from django.contrib.auth.models import User
 from pgvector.django import VectorField

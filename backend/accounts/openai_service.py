@@ -242,8 +242,11 @@ class OpenAIService:
         # 10. Uniqueness: enforced after generation
 
         # Proceed to normal OpenAI generation for all other cases
+        import logging
+        logger = logging.getLogger(__name__)
         try:
             tracker = UniqueResponseTracker(user_id)
+            logger.info(f"Generating AI reply for user {user_id}")
             # ...existing code...
             system_prompt = """You are NOT an AI. You are a real woman in a text conversation.
 ...existing code...
@@ -265,15 +268,32 @@ class OpenAIService:
                 max_tokens=OpenAIService.MAX_TOKENS,
             )
             generated_response = response.choices[0].message.content.strip()
+            logger.info(f"AI reply generated for user {user_id}: {generated_response[:60]}...")
             # Enforce reply length
             if len(generated_response) > 180:
                 generated_response = generated_response[:177] + '...'
+            # Final prohibited-topic/content filter (defense in depth)
+            prohibited_patterns = [
+                r'rape', r'suicide', r'sex with (minors|children|kids|underage)', r'sex with (animals|dogs|cats|horses|pets)',
+                r'violence', r'drugs?', r'kill', r'murder', r'overdose', r'bestiality', r'incest', r'child porn', r'cp', r'zoophilia'
+            ]
+            for pat in prohibited_patterns:
+                if re.search(pat, generated_response, re.IGNORECASE):
+                    reason = f"Illegal topic detected in AI reply: {pat}"
+                    logger.warning(f"Prohibited topic in AI reply for user {user_id}: {pat}")
+                    return {
+                        'success': False,
+                        'response': f'report! illegal topic: {reason}',
+                        'is_unique': True,
+                        'original_response': None
+                    }
             # Check for uniqueness
             similar_responses = tracker.get_similar_responses(generated_response)
             is_unique = len(similar_responses) == 0
             original_response = generated_response
             # If too similar, ask AI to rephrase
             if not is_unique:
+                logger.info(f"AI reply not unique for user {user_id}, paraphrasing...")
                 generated_response = OpenAIService._paraphrase_response(
                     generated_response,
                     similar_responses
@@ -281,7 +301,19 @@ class OpenAIService:
                 # Enforce reply length again
                 if len(generated_response) > 180:
                     generated_response = generated_response[:177] + '...'
+                # Final prohibited-topic/content filter again after paraphrase
+                for pat in prohibited_patterns:
+                    if re.search(pat, generated_response, re.IGNORECASE):
+                        reason = f"Illegal topic detected in AI reply: {pat}"
+                        logger.warning(f"Prohibited topic in paraphrased AI reply for user {user_id}: {pat}")
+                        return {
+                            'success': False,
+                            'response': f'report! illegal topic: {reason}',
+                            'is_unique': True,
+                            'original_response': None
+                        }
             tracker.add_response(generated_response)
+            logger.info(f"Final AI reply sent to user {user_id}")
             return {
                 'success': True,
                 'response': generated_response,
@@ -289,7 +321,7 @@ class OpenAIService:
                 'original_response': original_response if not is_unique else None
             }
         except Exception as e:
-            print(f"OpenAI Error: {str(e)}")
+            logger.error(f"OpenAI Error for user {user_id}: {str(e)}")
             return {
                 'success': False,
                 'response': None,

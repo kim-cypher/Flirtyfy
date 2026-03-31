@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_201_CREATED, HTTP_400_BAD_REQUEST, HTTP_200_OK
@@ -19,11 +21,13 @@ class RegisterView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             token = Token.objects.create(user=user)
+            logger.info(f"User registered: {user.username} ({user.id})")
             return Response({
                 'token': token.key,
                 'user': UserSerializer(user).data,
                 'message': 'User registered successfully.'
             }, status=HTTP_201_CREATED)
+        logger.warning(f"Registration failed: {serializer.errors}")
         return Response(serializer.errors, status=HTTP_400_BAD_REQUEST)
 
 
@@ -37,12 +41,13 @@ class LoginView(APIView):
         if serializer.is_valid():
             user = serializer.validated_data['user']
             token, created = Token.objects.get_or_create(user=user)
+            logger.info(f"User login: {user.username} ({user.id})")
             return Response({
                 'token': token.key,
                 'user': UserSerializer(user).data,
                 'message': 'Login successful.'
             }, status=HTTP_200_OK)
-        print("LOGIN SERIALIZER ERRORS:", serializer.errors)
+        logger.warning(f"Login failed: {serializer.errors}")
         return Response(serializer.errors, status=HTTP_400_BAD_REQUEST)
 
 
