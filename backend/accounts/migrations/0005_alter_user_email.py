@@ -1,0 +1,12 @@
+from django.db import migrations
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('accounts', '0004_rename_accounts_ai_user_id_created_idx_accounts_ai_user_id_7c3843_idx_and_more'),
+    ]
+
+    operations = [
+        # No-op migration - constraint added by 0006_user_email_unique
+    ]

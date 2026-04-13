@@ -1,0 +1,48 @@
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Production health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health/ || exit 1
+
+# Run Gunicorn with production settings
+CMD ["gunicorn", \
+     "flirty_backend.wsgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "8", \
+     "--worker-class", "gthread", \
+     "--threads", "2", \
+     "--worker-tmp-dir", "/dev/shm", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--timeout", "30", \
+     "--graceful-timeout", "10", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info"]

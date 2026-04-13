@@ -1,0 +1,435 @@
+version: '3.8'
+
+services:
+  # ==================== DATABASE ====================
+  db:
+    image: ankane/pgvector:latest
+    container_name: flirty-db
+    environment:
+      POSTGRES_DB: flirty
+      POSTGRES_USER: flirty
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-flirty_secure_pass_2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flirty"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+    networks:
+      - flirty_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # ==================== CONNECTION POOLER ====================
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: flirty-pgbouncer
+    environment:
+      DATABASES_HOST: db
+      DATABASES_PORT: 5432
+      DATABASES_USER: flirty
+      DATABASES_PASSWORD: ${DB_PASSWORD:-flirty_secure_pass_2024}
+      DATABASES_DBNAME: flirty
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 25
+      MIN_POOL_SIZE: 10
+      RESERVE_POOL_SIZE: 5
+      RESERVE_POOL_TIMEOUT: 3
+    ports:
+      - "6432:6432"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "psql", "-h", "localhost", "-U", "flirty", "-d", "flirty", "-c", "SELECT 1"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+
+  # ==================== CACHE & MESSAGE BROKER ====================
+  redis:
+    image: redis:7-alpine
+    container_name: flirty-redis
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+    networks:
+      - flirty_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2.5G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # ==================== LOAD BALANCER ====================
+  nginx:
+    image: nginx:alpine
+    container_name: flirty-nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend-1
+      - backend-2
+      - backend-3
+      - backend-4
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==================== BACKEND INSTANCES ====================
+  backend-1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-backend-1
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+      INSTANCE_ID: backend-1
+      WORKERS: 8
+      THREADS: 2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  backend-2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-backend-2
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+      INSTANCE_ID: backend-2
+      WORKERS: 8
+      THREADS: 2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  backend-3:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-backend-3
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+      INSTANCE_ID: backend-3
+      WORKERS: 8
+      THREADS: 2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  backend-4:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-backend-4
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+      INSTANCE_ID: backend-4
+      WORKERS: 8
+      THREADS: 2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  # ==================== CELERY WORKERS ====================
+  celery-worker-1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-celery-1
+    command: celery -A flirty_backend.celery:app worker --loglevel=info --concurrency=8 --max-tasks-per-child=100 --time-limit=300
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+      - db
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "flirty_backend.celery:app", "inspect", "ping"]
+      interval: 30s
+      retries: 3
+      timeout: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 800M
+    restart: unless-stopped
+
+  celery-worker-2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-celery-2
+    command: celery -A flirty_backend.celery:app worker --loglevel=info --concurrency=8 --max-tasks-per-child=100 --time-limit=300
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+      - db
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "flirty_backend.celery:app", "inspect", "ping"]
+      interval: 30s
+      retries: 3
+      timeout: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 800M
+    restart: unless-stopped
+
+  celery-worker-3:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: flirty-celery-3
+    command: celery -A flirty_backend.celery:app worker --loglevel=info --concurrency=8 --max-tasks-per-child=100 --time-limit=300
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings_prod
+      DATABASE_URL: postgresql://flirty:${DB_PASSWORD:-flirty_secure_pass_2024}@pgbouncer:6432/flirty
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      ENVIRONMENT: production
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+      - db
+    networks:
+      - flirty_network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "flirty_backend.celery:app", "inspect", "ping"]
+      interval: 30s
+      retries: 3
+      timeout: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 800M
+    restart: unless-stopped
+
+  # ==================== MONITORING ====================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: flirty-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - flirty_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: flirty-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_INSTALL_PLUGINS: redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - flirty_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  flirty_network:
+    driver: bridge

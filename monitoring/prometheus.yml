@@ -1,0 +1,70 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'flirtyfy-production'
+    environment: 'production'
+
+# Alerting rules
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+scrape_configs:
+  # ==================== BACKEND INSTANCES ====================
+  - job_name: 'backend'
+    static_configs:
+      - targets:
+          - 'backend-1:8000'
+          - 'backend-2:8000'
+          - 'backend-3:8000'
+          - 'backend-4:8000'
+    metrics_path: '/metrics/'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # ==================== NGINX LOAD BALANCER ====================
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ==================== REDIS ====================
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ==================== POSTGRESQL ====================
+  - job_name: 'postgres'
+    static_configs:
+      - targets:
+          - 'db:5432'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ==================== PGBOUNCER ====================
+  - job_name: 'pgbouncer'
+    static_configs:
+      - targets: ['pgbouncer:6432']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ==================== DOCKER ====================
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['host.docker.internal:9323']
+    scrape_interval: 15s
+
+  # ==================== NODE EXPORTER ====================
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s

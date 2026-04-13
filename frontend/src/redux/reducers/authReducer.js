@@ -1,7 +1,9 @@
+// Check if user has a valid token and was previously authenticated
+const savedToken = localStorage.getItem('access_token');
 const initialState = {
-  isAuthenticated: false,
+  isAuthenticated: !!savedToken,  // true if token exists, false otherwise
   user: null,
-  token: localStorage.getItem('access_token') || null,
+  token: savedToken || null,
   loading: false,
   error: null,
 };

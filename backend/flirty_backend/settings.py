@@ -10,20 +10,41 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+import environ
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Initialize environment
+env = environ.Env()
+
+# Try to read .env file from multiple possible locations
+env_path = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_path):
+    environ.Env.read_env(env_path)
+else:
+    # If .env doesn't exist, that's OK - environment variables can come from docker-compose/container env
+    pass
+
+# NOW safe to use env
+try:
+    SECRET_KEY = env("SECRET_KEY")
+except KeyError:
+    print("ERROR: SECRET_KEY not found in environment or .env file!")
+    print(f"Looking for .env at: {env_path}")
+    print(f"File exists: {os.path.exists(env_path)}")
+    raise EnvironmentError("SECRET_KEY must be set in environment variables or .env file")
+
+DEBUG = env.bool("DEBUG", default=True)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-...'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
 
@@ -40,6 +61,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'pgvector.django',
     'accounts',
 ]
 
@@ -76,10 +98,7 @@ WSGI_APPLICATION = 'flirty_backend.wsgi.application'
 
 
 
-# Environment variables
-import environ
-env = environ.Env()
-environ.Env.read_env()
+
 
 DATABASES = {
     'default': {
@@ -87,11 +106,10 @@ DATABASES = {
         'NAME': env('POSTGRES_DB', default='flirty'),
         'USER': env('POSTGRES_USER', default='flirty'),
         'PASSWORD': env('POSTGRES_PASSWORD', default='flirty'),
-        'HOST': env('POSTGRES_HOST', default='db'),
+        'HOST': env('POSTGRES_HOST', default='db'),  
         'PORT': env('POSTGRES_PORT', default='5432'),
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#password-validation
@@ -148,18 +166,17 @@ REST_FRAMEWORK = {
 
 # Redis cache for production
 CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': env('CELERY_BROKER_URL', default='redis://redis:6379/0'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env("REDIS_URL", default="redis://redis:6379/0"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
     }
 }
 
-# Celery
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://redis:6379/0')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://redis:6379/0')
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://redis:6379/0")
 CELERY_TASK_ALWAYS_EAGER = False
 CELERY_RESULT_EXTENDED = True
 CELERY_ACCEPT_CONTENT = ['json']
@@ -167,21 +184,28 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-# pgvector
-INSTALLED_APPS += ['pgvector.django', 'django_celery_results']
+# Django Celery Results
+INSTALLED_APPS += ['django_celery_results']
 
 # API Configuration
 # OpenAI API Key - Get from: https://platform.openai.com/api/keys
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-GEONAMES_USERNAME = os.getenv('GEONAMES_USERNAME', '')
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+GEONAMES_USERNAME = env("GEONAMES_USERNAME", default="")
 
 # Log warning if API keys are not set
 if not OPENAI_API_KEY:
     print("⚠️ WARNING: OPENAI_API_KEY not set in environment variables")
 if not GEONAMES_USERNAME:
     print("⚠️ WARNING: GEONAMES_USERNAME not set in environment variables")
+
+# Django Channels Configuration (for WebSocket support)
+# This connects to your WSL Redis instance
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("redis", 6379)],
+        },
+    }
+}

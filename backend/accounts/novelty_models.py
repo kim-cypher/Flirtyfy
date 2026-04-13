@@ -1,23 +1,20 @@
-class AIReplyFeedback(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_feedbacks')
-    reply = models.ForeignKey(AIReply, on_delete=models.CASCADE, related_name='feedbacks')
-    reason = models.CharField(max_length=256)
-    created_at = models.DateTimeField(auto_now_add=True)
 from django.db import models
 from django.contrib.auth.models import User
 from pgvector.django import VectorField
+
 
 class ConversationUpload(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='uploads')
     original_text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+
 class AIReply(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_replies')
     upload = models.ForeignKey(ConversationUpload, on_delete=models.CASCADE, related_name='replies')
     original_text = models.TextField()
     normalized_text = models.TextField()
-    embedding = VectorField(dimensions=1536)  # OpenAI embedding size
+    embedding = VectorField(dimensions=1536, null=True, blank=True)  # OpenAI text-embedding-3-small
     fingerprint = models.CharField(max_length=128, db_index=True)
     summary = models.TextField()
     intent = models.CharField(max_length=64)
@@ -32,5 +29,11 @@ class AIReply(models.Model):
             models.Index(fields=['expires_at']),
             models.Index(fields=['fingerprint']),
             models.Index(fields=['normalized_text']),
-            models.Index(fields=['embedding']),
         ]
+
+
+class AIReplyFeedback(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_feedbacks')
+    reply = models.ForeignKey(AIReply, on_delete=models.CASCADE, related_name='feedbacks')
+    reason = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)

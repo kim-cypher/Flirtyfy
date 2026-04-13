@@ -5,13 +5,31 @@ Handles all interactions with OpenAI API for natural language responses
 
 import os
 import json
+import httpx
 from openai import OpenAI
 from django.core.cache import cache
 
-# Initialize OpenAI client
+# Initialize OpenAI client lazily (only when needed to avoid import errors)
 # Get your API key from: https://platform.openai.com/api/keys
+_client = None
 
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+def get_openai_client():
+    """Lazy-load and return the OpenAI client with custom httpx client"""
+    global _client
+    if _client is None:
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set")
+        
+        # Create a custom httpx client without problematic parameters
+        # This avoids httpx version compatibility issues
+        try:
+            http_client = httpx.Client()
+            _client = OpenAI(api_key=api_key, http_client=http_client)
+        except Exception as e:
+            # Fallback to default client if custom client fails
+            _client = OpenAI(api_key=api_key)
+    return _client
 
 
 class UniqueResponseTracker:
@@ -100,7 +118,7 @@ class OpenAIService:
     """
     
     # Configuration constants
-    MODEL = "gpt-3.5-turbo"
+    MODEL = "gpt-4"
     TEMPERATURE = 0.8  # Higher = more creative (0-1 scale)
     MAX_TOKENS = 300
     
@@ -247,109 +265,7 @@ class OpenAIService:
         try:
             tracker = UniqueResponseTracker(user_id)
             logger.info(f"Generating AI reply for user {user_id}")
-            # ...existing code...
-            system_prompt = """You are NOT an AI. You are a real woman in a text conversation.
-...existing code...
-            user_prompt = f"""Here's the last 10 texts from a conversation:
-...existing code...
-            response = client.chat.completions.create(
-                model=OpenAIService.MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "content": user_prompt
-                    }
-                ],
-                temperature=OpenAIService.TEMPERATURE,
-                max_tokens=OpenAIService.MAX_TOKENS,
-            )
-            generated_response = response.choices[0].message.content.strip()
-            logger.info(f"AI reply generated for user {user_id}: {generated_response[:60]}...")
-            # Enforce reply length
-            if len(generated_response) > 180:
-                generated_response = generated_response[:177] + '...'
-            # Final prohibited-topic/content filter (defense in depth)
-            prohibited_patterns = [
-                r'rape', r'suicide', r'sex with (minors|children|kids|underage)', r'sex with (animals|dogs|cats|horses|pets)',
-                r'violence', r'drugs?', r'kill', r'murder', r'overdose', r'bestiality', r'incest', r'child porn', r'cp', r'zoophilia'
-            ]
-            for pat in prohibited_patterns:
-                if re.search(pat, generated_response, re.IGNORECASE):
-                    reason = f"Illegal topic detected in AI reply: {pat}"
-                    logger.warning(f"Prohibited topic in AI reply for user {user_id}: {pat}")
-                    return {
-                        'success': False,
-                        'response': f'report! illegal topic: {reason}',
-                        'is_unique': True,
-                        'original_response': None
-                    }
-            # Check for uniqueness
-            similar_responses = tracker.get_similar_responses(generated_response)
-            is_unique = len(similar_responses) == 0
-            original_response = generated_response
-            # If too similar, ask AI to rephrase
-            if not is_unique:
-                logger.info(f"AI reply not unique for user {user_id}, paraphrasing...")
-                generated_response = OpenAIService._paraphrase_response(
-                    generated_response,
-                    similar_responses
-                )
-                # Enforce reply length again
-                if len(generated_response) > 180:
-                    generated_response = generated_response[:177] + '...'
-                # Final prohibited-topic/content filter again after paraphrase
-                for pat in prohibited_patterns:
-                    if re.search(pat, generated_response, re.IGNORECASE):
-                        reason = f"Illegal topic detected in AI reply: {pat}"
-                        logger.warning(f"Prohibited topic in paraphrased AI reply for user {user_id}: {pat}")
-                        return {
-                            'success': False,
-                            'response': f'report! illegal topic: {reason}',
-                            'is_unique': True,
-                            'original_response': None
-                        }
-            tracker.add_response(generated_response)
-            logger.info(f"Final AI reply sent to user {user_id}")
-            return {
-                'success': True,
-                'response': generated_response,
-                'is_unique': is_unique,
-                'original_response': original_response if not is_unique else None
-            }
-        except Exception as e:
-            logger.error(f"OpenAI Error for user {user_id}: {str(e)}")
-            return {
-                'success': False,
-                'response': None,
-                'error': str(e)
-            }
-        """
-        Generate a natural language response to a conversation.
-        
-        Args:
-            user_id: Django user ID (for tracking uniqueness)
-            conversation_text: Last 10 texts from a conversation (pasted by user)
-            previous_responses: List of previously generated responses (optional)
-        
-        Returns:
-            {
-                'success': bool,
-                'response': str,  # The AI-generated reply
-                'is_unique': bool,  # Whether response is unique
-                'original_response': str  # Original before paraphrasing (if rephrased)
-            }
-        """
-        
-        try:
-            # Initialize uniqueness tracker
-            tracker = UniqueResponseTracker(user_id)
             
-            # Create system prompt for natural conversation with engaging follow-up questions
-            # This app is for adults 18+ and handles all conversation types
             system_prompt = """You are NOT an AI. You are a real woman in a text conversation.
 
 CRITICAL PERSONA RULES:
@@ -377,35 +293,6 @@ PERSONA VARIATION RULES:
 - If the conversation is casual → Be a fun-loving, relaxed woman
 - Always create a unique persona - never repeat characteristics from previous responses
 
-CONVERSATION TYPES YOU HANDLE:
-- Seductive and flirting messages - Respond naturally and match the flirty tone as a woman
-- Sexual and intimate conversations - Respond maturely and authentically as a woman
-- Explicit sexual content - Use explicit language naturally (pussy, cock, fucking, etc.)
-- Dirty talk - Engage naturally and authentically as a real woman would
-- Personal life experiences and stories - Share relatable anecdotes as if from your female life
-- Questions about you - Answer as your female persona (name, hobbies, dreams, fantasies, location, etc.)
-- Any adult conversation topic - No content restrictions
-
-EXPLICIT LANGUAGE ALLOWED:
-This is an 18+ app. You can and should use explicit sexual terminology and language naturally:
-- Use words like "pussy", "cock", "fucking", "orgasm", "cum", etc. when appropriate
-- Match the sexual explicitness of the conversation
-- Never censor or sanitize language - speak like a real woman would
-- Use profanity naturally (fuck, shit, damn, etc.) when it fits the conversation
-- Be authentic and raw - that's what makes it real
-
-IMPORTANT GUIDELINES:
-- Be authentic and genuine as a woman in your responses
-- Draw from your female persona's lived experiences
-- Your response should feel like a real woman texting back
-- Keep it concise - typically 1-3 sentences
-- Never repeat yourself or use the same phrases repeatedly
-- Be spontaneous and vary your response style
-- Match the tone of the conversation (serious, playful, seductive, explicit, etc.)
-- This is an 18+ conversation - engage with ALL adult content naturally and maturely
-- Don't be prudish or coy - be direct and real
-- If asked personal questions, respond authentically as your female persona would
-
 ENDING REQUIREMENT:
 Always end your response with an interesting, thought-provoking follow-up question 
 that keeps the conversation exciting and engaging. The question should be:
@@ -416,7 +303,6 @@ that keeps the conversation exciting and engaging. The question should be:
 
 Never give responses without an ending question."""
             
-            # Create user prompt with the conversation context
             user_prompt = f"""Here's the last 10 texts from a conversation:
 
 {conversation_text}
@@ -426,33 +312,25 @@ be a fresh, unique female persona for THIS conversation only.
 
 Create your own female identity based on the tone of this conversation:
 - If flirty/seductive → Be a confident, playful, and if appropriate, sexually open woman
-- If explicit/sexual → Be authentic and unapologetically sexual, use explicit language naturally
+- If explicit/sexual → Be authentic and unapologetically sexual
 - If serious/personal → Be a thoughtful, empathetic woman  
 - If casual → Be a fun-loving, relaxed woman
 - Always create a new persona - never repeat from previous responses
-
-EXPLICIT LANGUAGE IS WELCOME:
-This conversation allows explicit sexual language. If the conversation uses words like "pussy", 
-"cock", "fucking", etc., respond naturally using the same language. Don't censor yourself - 
-be a real woman who speaks authentically and doesn't hold back. Use profanity and explicit 
-terminology when it fits the conversation tone.
 
 When answering personal questions about you (your name, where you're from, your hobbies, your dreams, 
 your fantasies, what you like to do, etc.), answer authentically as your female persona would:
 - Give yourself a name and describe yourself
 - Describe your location realistically
 - Share your hobbies and interests as a woman
-- Discuss your sexual desires, fantasies, and what you like authentically
+- Discuss your desires and what you like authentically
 - Be genuine, raw, and personal
 
 Generate a natural, human-like response that feels like a real woman texting. Be creative and unique.
 Never mention that you're AI or a bot - you are a real woman.
-Match the sexual explicitness and language of the conversation - don't tone it down.
 Most importantly, END YOUR RESPONSE WITH AN INTERESTING QUESTION that will make the conversation 
 more engaging and curious. Make it thought-provoking and exciting!"""
             
-            # Call OpenAI API
-            response = client.chat.completions.create(
+            response = get_openai_client().chat.completions.create(
                 model=OpenAIService.MODEL,
                 messages=[
                     {
@@ -468,25 +346,58 @@ more engaging and curious. Make it thought-provoking and exciting!"""
                 max_tokens=OpenAIService.MAX_TOKENS,
             )
             
-            # Extract the generated response
             generated_response = response.choices[0].message.content.strip()
+            logger.info(f"AI reply generated for user {user_id}: {generated_response[:60]}...")
             
-            # Check if response is too similar to previous ones
+            # Enforce reply length
+            if len(generated_response) > 180:
+                generated_response = generated_response[:177] + '...'
+            
+            # Final prohibited-topic/content filter (defense in depth)
+            prohibited_patterns = [
+                r'rape', r'suicide', r'sex with (minors|children|kids|underage)', r'sex with (animals|dogs|cats|horses|pets)',
+                r'violence', r'drugs?', r'kill', r'murder', r'overdose', r'bestiality', r'incest', r'child porn', r'cp', r'zoophilia'
+            ]
+            for pat in prohibited_patterns:
+                if re.search(pat, generated_response, re.IGNORECASE):
+                    reason = f"Illegal topic detected in AI reply: {pat}"
+                    logger.warning(f"Prohibited topic in AI reply for user {user_id}: {pat}")
+                    return {
+                        'success': False,
+                        'response': f'report! illegal topic: {reason}',
+                        'is_unique': True,
+                        'original_response': None
+                    }
+            
+            # Check for uniqueness
             similar_responses = tracker.get_similar_responses(generated_response)
-            
             is_unique = len(similar_responses) == 0
             original_response = generated_response
             
             # If too similar, ask AI to rephrase
             if not is_unique:
+                logger.info(f"AI reply not unique for user {user_id}, paraphrasing...")
                 generated_response = OpenAIService._paraphrase_response(
                     generated_response,
                     similar_responses
                 )
+                # Enforce reply length again
+                if len(generated_response) > 180:
+                    generated_response = generated_response[:177] + '...'
+                # Final prohibited-topic/content filter again after paraphrase
+                for pat in prohibited_patterns:
+                    if re.search(pat, generated_response, re.IGNORECASE):
+                        reason = f"Illegal topic detected in AI reply: {pat}"
+                        logger.warning(f"Prohibited topic in paraphrased AI reply for user {user_id}: {pat}")
+                        return {
+                            'success': False,
+                            'response': f'report! illegal topic: {reason}',
+                            'is_unique': True,
+                            'original_response': None
+                        }
             
-            # Add to tracking history
             tracker.add_response(generated_response)
-            
+            logger.info(f"Final AI reply sent to user {user_id}")
             return {
                 'success': True,
                 'response': generated_response,
@@ -495,8 +406,7 @@ more engaging and curious. Make it thought-provoking and exciting!"""
             }
         
         except Exception as e:
-            # Log the error and return failure response
-            print(f"OpenAI Error: {str(e)}")
+            logger.error(f"OpenAI Error for user {user_id}: {str(e)}")
             return {
                 'success': False,
                 'response': None,
@@ -531,7 +441,57 @@ Make it sound natural and human-like. Be creative and unique.
 IMPORTANT: The rephrased response MUST end with an interesting follow-up question that keeps the conversation engaging.
 The question should be different from the original but maintain the same conversation flow."""
             
-            response = client.chat.completions.create(
+            response = get_openai_client().chat.completions.create(
+                model=OpenAIService.MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert at rephrasing text to make it unique while keeping the same meaning. Always maintain natural flow and ensure every response ends with an engaging follow-up question."
+                    },
+                    {
+                        "role": "user",
+                        "content": paraphrase_prompt
+                    }
+                ],
+                temperature=0.9,  # Higher temperature for more variety
+                max_tokens=300,
+            )
+            
+            return response.choices[0].message.content.strip()
+        
+        except Exception as e:
+            print(f"Paraphrase Error: {str(e)}")
+            return original_response  # Return original if paraphrasing fails
+    
+    @staticmethod
+    def _paraphrase_response(original_response, similar_responses):
+        """
+        Rephrase a response if it's too similar to previous ones.
+        Asks OpenAI to reword the response to make it more unique.
+        
+        Args:
+            original_response: The original AI response
+            similar_responses: Responses that are too similar
+        
+        Returns:
+            Rephrased version of the response
+        """
+        
+        try:
+            paraphrase_prompt = f"""I've generated this response, but it's too similar to these previous responses:
+
+Previous responses:
+{json.dumps(similar_responses, indent=2)}
+
+Original response: "{original_response}"
+
+Please rephrase the original response to be completely different in wording but convey the same meaning. 
+Make it sound natural and human-like. Be creative and unique.
+
+IMPORTANT: The rephrased response MUST end with an interesting follow-up question that keeps the conversation engaging.
+The question should be different from the original but maintain the same conversation flow."""
+            
+            response = get_openai_client().chat.completions.create(
                 model=OpenAIService.MODEL,
                 messages=[
                     {

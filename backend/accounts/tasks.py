@@ -16,17 +16,22 @@ def process_upload_task(self, upload_id):
     intent = classify_intent(prompt)
     since = timezone.now() - timedelta(days=45)
     memory = AIReply.objects.filter(user=user, created_at__gte=since)
-    for attempt in range(5):
-        candidate = generate_reply(prompt, context=f"Summarize: {summary}\nIntent: {intent}")
+    
+    # Try 5 times with increasing temperature and explicit diversity instructions
+    for attempt in range(1, 6):  # Attempts 1-5
+        candidate = generate_reply(prompt, user=user, context=f"Summarize: {summary}\nIntent: {intent}", attempt_number=attempt)
         norm = normalize_text(candidate)
         fp = fingerprint_text(candidate)
         emb = get_embedding(candidate)
+        
+        # Check if response is unique against user's history
         if memory.filter(fingerprint=fp).exists():
             continue
         if semantic_similar_replies(user, emb, since).exists():
             continue
         if lexical_similar_replies(user, norm, since).exists():
             continue
+        
         # Prune AIReply entries older than 45 days for this user
         AIReply.objects.filter(user=user, created_at__lt=timezone.now() - timedelta(days=45)).delete()
         reply = AIReply.objects.create(
@@ -43,7 +48,8 @@ def process_upload_task(self, upload_id):
             status='complete'
         )
         return reply.id
-    # Prune AIReply entries older than 45 days for this user
+    
+    # Fallback: if all 5 attempts are similar, store the last one anyway (status='fallback')
     AIReply.objects.filter(user=user, created_at__lt=timezone.now() - timedelta(days=45)).delete()
     reply = AIReply.objects.create(
         user=user,
