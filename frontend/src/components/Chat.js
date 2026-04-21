@@ -37,6 +37,14 @@ function Chat() {
     navigate('/login');
   };
 
+  const handleGoHome = () => {
+    navigate('/dashboard');
+  };
+
+  const handleGoToLocations = () => {
+    navigate('/locations');
+  };
+
   const handleGenerateResponse = async () => {
     if (!conversation.trim()) {
       setError('Please paste a conversation');
@@ -121,6 +129,12 @@ function Chat() {
           <h1>Let's Chat!</h1>
         </div>
         <div className="header-right">
+          <button className="btn-nav" onClick={handleGoHome}>
+            Home
+          </button>
+          <button className="btn-nav" onClick={handleGoToLocations}>
+            Find Locations
+          </button>
           {user && <span className="user-name">{user.username}</span>}
           <button className="btn-logout" onClick={handleLogout}>
             Logout

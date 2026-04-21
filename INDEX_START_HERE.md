@@ -199,7 +199,22 @@ Pick your path from above (Path 1 is fastest) and start reading.
 - Success criteria
 - **When to read:** To verify all changes
 
-### 7. **This File (INDEX_START_HERE.md)** 
+### 8. **LOCATION_MEETING_RULES_IMPLEMENTATION.md** 🎯 CONVERSATION RULES
+- How location questions are handled
+- How meeting requests are declined
+- Contextual anchoring strategy
+- Complete rule documentation
+- Test suite results
+- **When to read:** To understand conversation safety rules
+
+### 9. **LOCATION_MEETING_QUICK_REFERENCE.md** 📝 QUICK GUIDE
+- Quick reference for what's allowed/blocked
+- Example interactions
+- What users will experience
+- Testing instructions
+- **When to read:** For quick lookup of rules
+
+### This File (INDEX_START_HERE.md) 
 - You're reading it! 👈
 - Roadmap for all docs
 - Quick overview

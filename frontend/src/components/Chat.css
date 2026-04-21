@@ -63,6 +63,23 @@
   background-color: #9333ea;
 }
 
+.btn-nav {
+  background-color: transparent;
+  color: #e0d0f8;
+  border: 1px solid rgba(124, 58, 237, 0.7);
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.btn-nav:hover {
+  background-color: rgba(124, 58, 237, 0.15);
+  border-color: #7c3aed;
+}
+
 /* Main Content Area */
 .chat-main {
   flex: 1;

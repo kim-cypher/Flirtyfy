@@ -66,3 +66,4 @@ services:
       - ../frontend:/app
     environment:
       CHOKIDAR_USEPOLLING: "true"
+      REACT_APP_API_URL: http://backend:8000/api

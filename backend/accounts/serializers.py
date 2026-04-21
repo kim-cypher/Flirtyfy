@@ -126,12 +126,19 @@ class UserSerializer(serializers.ModelSerializer):
 class ConversationUploadSerializer(serializers.ModelSerializer):
     """Serializer for conversation uploads with validation"""
     def validate_original_text(self, value):
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Validating original_text: {value[:50]}... (len={len(value)})")
+        
         # Enforce length limits
         if not (10 <= len(value.strip()) <= 2000):
+            logger.warning(f"Length validation failed: {len(value)} chars (must be 10-2000)")
             raise serializers.ValidationError("Conversation text must be between 10 and 2000 characters.")
         
         # Disallow dangerous characters (basic injection prevention)
         if re.search(r'[<>\{\}\[\]\\]', value):
+            logger.warning(f"Dangerous characters detected in: {value[:50]}")
             raise serializers.ValidationError("Invalid characters detected in conversation text.")
         
         # Basic profanity filter (expand as needed)
@@ -141,8 +148,10 @@ class ConversationUploadSerializer(serializers.ModelSerializer):
         ]
         for word in profanity:
             if re.search(word, value, re.IGNORECASE):
+                logger.warning(f"Profanity detected: {word}")
                 raise serializers.ValidationError("Inappropriate language detected. Please rephrase.")
         
+        logger.info(f"Validation passed for text: {value[:50]}...")
         return value
 
     class Meta:

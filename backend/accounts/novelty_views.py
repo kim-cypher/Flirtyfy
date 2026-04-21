@@ -23,6 +23,12 @@ class ConversationUploadView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         """Create with rate limiting and abuse prevention"""
+        logger.info(f"POST /api/novelty/upload/ received")
+        logger.info(f"User authenticated: {request.user.is_authenticated}")
+        logger.info(f"User: {request.user}")
+        logger.info(f"Request data: {request.data}")
+        logger.info(f"Authorization header: {request.META.get('HTTP_AUTHORIZATION', 'NONE')}")
+        
         user_id = request.user.id
         key = f"chat_upload_rate_{user_id}"
         count = cache.get(key, 0)
@@ -50,18 +56,22 @@ class ConversationUploadView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         """Save upload and trigger async processing"""
-        upload = serializer.save(user=self.request.user)
-        logger.info(f"Conversation uploaded by user {self.request.user.id}, upload id {upload.id}")
-        
-        # Try async via Celery, fallback to sync if Celery not available
         try:
-            process_upload_task.delay(upload.id)
-        except Exception as e:
-            logger.warning(f"Celery not available, processing synchronously: {e}")
+            upload = serializer.save(user=self.request.user)
+            logger.info(f"Conversation uploaded by user {self.request.user.id}, upload id {upload.id}")
+            
+            # Try async via Celery, fallback to sync if Celery not available
             try:
-                process_upload_task(upload.id)
-            except Exception as task_error:
-                logger.error(f"Failed to process upload {upload.id}: {task_error}")
+                process_upload_task.delay(upload.id)
+            except Exception as e:
+                logger.warning(f"Celery not available, processing synchronously: {e}")
+                try:
+                    process_upload_task(upload.id)
+                except Exception as task_error:
+                    logger.error(f"Failed to process upload {upload.id}: {task_error}")
+        except Exception as e:
+            logger.error(f"Error in perform_create: {e}")
+            raise
 
 
 class AIReplyListView(generics.ListAPIView):

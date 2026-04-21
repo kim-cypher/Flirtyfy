@@ -18,86 +18,86 @@ class Migration(migrations.Migration):
         # ==================== USER INDEXES ====================
         # Speed up user lookups by email (used in login)
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_email ON auth_user(email);',
+            'CREATE INDEX IF NOT EXISTS idx_user_email ON auth_user(email);',
             'DROP INDEX IF EXISTS idx_user_email;'
         ),
         
         # Speed up user lookups by username
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_username ON auth_user(username);',
+            'CREATE INDEX IF NOT EXISTS idx_user_username ON auth_user(username);',
             'DROP INDEX IF EXISTS idx_user_username;'
         ),
         
         # Speed up last login queries
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_last_login ON auth_user(last_login DESC NULLS LAST);',
+            'CREATE INDEX IF NOT EXISTS idx_user_last_login ON auth_user(last_login DESC NULLS LAST);',
             'DROP INDEX IF EXISTS idx_user_last_login;'
         ),
 
         # ==================== CONVERSATION INDEXES ====================
         # Speed up conversation lookups by user
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_conversation_user_id ON accounts_conversationupload(user_id);',
+            'CREATE INDEX IF NOT EXISTS idx_conversation_user_id ON accounts_conversationupload(user_id);',
             'DROP INDEX IF EXISTS idx_conversation_user_id;'
         ),
         
         # Speed up recent conversation queries
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_conversation_created_at ON accounts_conversationupload(created_at DESC);',
+            'CREATE INDEX IF NOT EXISTS idx_conversation_created_at ON accounts_conversationupload(created_at DESC);',
             'DROP INDEX IF EXISTS idx_conversation_created_at;'
         ),
         
         # Speed up conversation status queries
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_conversation_status ON accounts_conversationupload(status);',
+            'CREATE INDEX IF NOT EXISTS idx_conversation_status ON accounts_conversationupload(status);',
             'DROP INDEX IF EXISTS idx_conversation_status;'
         ),
         
         # Composite index for common queries
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_conversation_user_created ON accounts_conversationupload(user_id, created_at DESC);',
+            'CREATE INDEX IF NOT EXISTS idx_conversation_user_created ON accounts_conversationupload(user_id, created_at DESC);',
             'DROP INDEX IF EXISTS idx_conversation_user_created;'
         ),
 
         # ==================== AI REPLY INDEXES ====================
         # Speed up reply lookups by conversation
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_conversation_id ON accounts_aireply(conversation_upload_id);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_conversation_id ON accounts_aireply(conversation_upload_id);',
             'DROP INDEX IF EXISTS idx_reply_conversation_id;'
         ),
         
         # Speed up user's latest replies query
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_user_id ON accounts_aireply(user_id);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_user_id ON accounts_aireply(user_id);',
             'DROP INDEX IF EXISTS idx_reply_user_id;'
         ),
         
         # Speed up status queries for processing
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_status ON accounts_aireply(status);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_status ON accounts_aireply(status);',
             'DROP INDEX IF EXISTS idx_reply_status;'
         ),
         
         # Speed up recent replies
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_created_at ON accounts_aireply(created_at DESC);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_created_at ON accounts_aireply(created_at DESC);',
             'DROP INDEX IF EXISTS idx_reply_created_at;'
         ),
         
         # Fingerprint lookups for uniqueness checking
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_fingerprint ON accounts_aireply(fingerprint);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_fingerprint ON accounts_aireply(fingerprint);',
             'DROP INDEX IF EXISTS idx_reply_fingerprint;'
         ),
         
         # Composite indexes for common queries
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_user_created ON accounts_aireply(user_id, created_at DESC);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_user_created ON accounts_aireply(user_id, created_at DESC);',
             'DROP INDEX IF EXISTS idx_reply_user_created;'
         ),
         
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_conversation_status ON accounts_aireply(conversation_upload_id, status);',
+            'CREATE INDEX IF NOT EXISTS idx_reply_conversation_status ON accounts_aireply(conversation_upload_id, status);',
             'DROP INDEX IF EXISTS idx_reply_conversation_status;'
         ),
 
@@ -107,8 +107,8 @@ class Migration(migrations.Migration):
         # IMPORTANT: Only works if pgvector extension is installed and embeddings column exists
         migrations.RunSQL(
             '''
-            CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reply_embeddings_ivf 
-            ON accounts_aireply USING ivfflat (embeddings vector_l2_ops) 
+            CREATE INDEX IF NOT EXISTS idx_reply_embeddings_ivf 
+            ON accounts_aireply USING ivfflat (embedding vector_l2_ops) 
             WITH (lists = 100);
             ''',
             'DROP INDEX IF EXISTS idx_reply_embeddings_ivf;',
@@ -118,12 +118,12 @@ class Migration(migrations.Migration):
         # ==================== USER PROFILE INDEXES ====================
         # Speed up location-based queries (if implemented)
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_userprofile_age ON accounts_userprofile(age);',
+            'CREATE INDEX IF NOT EXISTS idx_userprofile_age ON accounts_userprofile(age);',
             'DROP INDEX IF EXISTS idx_userprofile_age;'
         ),
         
         migrations.RunSQL(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_userprofile_user_id ON accounts_userprofile(user_id);',
+            'CREATE INDEX IF NOT EXISTS idx_userprofile_user_id ON accounts_userprofile(user_id);',
             'DROP INDEX IF EXISTS idx_userprofile_user_id;'
         ),
 

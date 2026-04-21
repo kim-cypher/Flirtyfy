@@ -60,9 +60,9 @@ function FindLocation() {
   };
 
   /**
-   * Navigate to Dashboard
+   * Navigate to Home Dashboard
    */
-  const handleGoToDashboard = () => {
+  const handleGoHome = () => {
     navigate('/dashboard');
   };
 
@@ -147,12 +147,12 @@ function FindLocation() {
           <h2>📍 Find Location</h2>
         </div>
         <div className="nav-center">
-          <button className="nav-btn" onClick={handleGoToChat}>
-            💬 Chat
+          <button className="nav-btn" onClick={handleGoHome}>
+            🏠 Home
           </button>
           <button className="nav-btn active">Find Location</button>
-          <button className="nav-btn" onClick={handleGoToDashboard}>
-            ⚙️ Profile
+          <button className="nav-btn" onClick={handleGoToChat}>
+            💬 Chat
           </button>
         </div>
         <div className="nav-right">
@@ -309,47 +309,6 @@ function FindLocation() {
           </div>
         )}
 
-        {!searched && (
-          <div className="info-section">
-            <div className="info-card">
-              <h3>💡 How It Works</h3>
-              <ul className="info-list">
-                <li>
-                  <strong>Select a US state</strong> from the dropdown above
-                </li>
-                <li>
-                  <strong>Click Search</strong> to find all cities within 45 minutes
-                  (approximately 45-75km radius)
-                </li>
-                <li>
-                  <strong>View results</strong> with distance, population, and coordinates
-                </li>
-                <li>
-                  <strong>Sort results</strong> by distance (closest first) or population
-                  (largest first)
-                </li>
-              </ul>
-            </div>
-
-            <div className="info-card">
-              <h3>📌 About the Search</h3>
-              <ul className="info-list">
-                <li>
-                  <strong>Data Source:</strong> GeoNames.org - Global geographic database
-                </li>
-                <li>
-                  <strong>Search Radius:</strong> Approximately 45-75km from state center
-                </li>
-                <li>
-                  <strong>Accuracy:</strong> Results based on straight-line distance (as-the-crow-flies)
-                </li>
-                <li>
-                  <strong>Note:</strong> Some states may have limited nearby cities due to geography
-                </li>
-              </ul>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

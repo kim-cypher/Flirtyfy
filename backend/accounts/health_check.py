@@ -98,7 +98,8 @@ def metrics(request):
     
     try:
         # Get metrics from database
-        from accounts.models import User, ConversationUpload, AIReply
+        from django.contrib.auth.models import User
+        from accounts.novelty_models import ConversationUpload, AIReply
         
         # Count total users
         total_users = User.objects.count()

@@ -9,31 +9,69 @@ from datetime import timedelta
 
 @shared_task(bind=True, max_retries=3)
 def process_upload_task(self, upload_id):
+    """
+    Process conversation upload and generate unique AI reply
+    
+    VALIDATION FLOW:
+    1. generate_reply() validates response against ALL 7 rules:
+       - Rule 1: Character length (140-180)
+       - Rule 2: Must end with question mark
+       - Rule 3: No prohibited content
+       - Rule 4: Not robotic/formulaic
+       - Rule 5: Fingerprint unique
+       - Rule 6: Semantic unique (pgvector)
+       - Rule 7: Lexical unique (text similarity)
+    
+    2. This task checks uniqueness a FINAL TIME before creating database entry
+       to ensure response is still unique after generation delay
+    
+    3. Response is only saved to DB if ALL validations pass
+    """
     upload = ConversationUpload.objects.get(id=upload_id)
     user = upload.user
     prompt = upload.original_text
     summary = summarize_text(prompt)
     intent = classify_intent(prompt)
     since = timezone.now() - timedelta(days=45)
-    memory = AIReply.objects.filter(user=user, created_at__gte=since)
     
     # Try 5 times with increasing temperature and explicit diversity instructions
     for attempt in range(1, 6):  # Attempts 1-5
-        candidate = generate_reply(prompt, user=user, context=f"Summarize: {summary}\nIntent: {intent}", attempt_number=attempt)
+        # generate_reply() ALREADY validates against ALL 7 rules internally
+        # with automatic rephrasing up to 3 times if validation fails
+        candidate = generate_reply(
+            prompt, 
+            user=user, 
+            context=f"Summarize: {summary}\nIntent: {intent}", 
+            attempt_number=attempt
+        )
+        
+        # CRITICAL: Response from generate_reply() already passed ALL validation rules
+        # But we re-check ONLY uniqueness here because:
+        # - If response doesn't meet length/question/prohibited/robotic rules → generate_reply returns error
+        # - We only store responses that passed generate_reply() validation
+        # - But we still check uniqueness in case user has since uploaded identical conversation
+        
         norm = normalize_text(candidate)
         fp = fingerprint_text(candidate)
         emb = get_embedding(candidate)
         
-        # Check if response is unique against user's history
-        if memory.filter(fingerprint=fp).exists():
-            continue
-        if semantic_similar_replies(user, emb, since).exists():
-            continue
-        if lexical_similar_replies(user, norm, since).exists():
-            continue
+        # ===== FINAL UNIQUENESS RE-CHECK =====
+        # Rule 5: Fingerprint unique (no exact matches in last 45 days)
+        if AIReply.objects.filter(user=user, fingerprint=fp, created_at__gte=since).exists():
+            continue  # Try next attempt
         
+        # Rule 6: Semantic unique (pgvector similarity < 0.95)
+        if semantic_similar_replies(user, emb, since).exists():
+            continue  # Try next attempt
+        
+        # Rule 7: Lexical unique (text overlap < 0.95)
+        if lexical_similar_replies(user, norm, since).exists():
+            continue  # Try next attempt
+        
+        # ===== ALL VALIDATIONS PASSED =====
         # Prune AIReply entries older than 45 days for this user
         AIReply.objects.filter(user=user, created_at__lt=timezone.now() - timedelta(days=45)).delete()
+        
         reply = AIReply.objects.create(
             user=user,
             upload=upload,
@@ -45,11 +83,14 @@ def process_upload_task(self, upload_id):
             intent=intent,
             created_at=timezone.now(),
             expires_at=timezone.now() + timedelta(days=45),
-            status='complete'
+            status='complete'  # ✅ Response is valid and ready to use
         )
         return reply.id
     
-    # Fallback: if all 5 attempts are similar, store the last one anyway (status='fallback')
+    # ===== FALLBACK: ALL 5 ATTEMPTS FAILED UNIQUENESS CHECK =====
+    # This is rare - means response generation succeeded but all attempts were similar
+    # or user submitted same conversation 5 times rapidly
+    # Still save response with 'fallback' status for user transparency
     AIReply.objects.filter(user=user, created_at__lt=timezone.now() - timedelta(days=45)).delete()
     reply = AIReply.objects.create(
         user=user,
@@ -62,6 +103,6 @@ def process_upload_task(self, upload_id):
         intent=intent,
         created_at=timezone.now(),
         expires_at=timezone.now() + timedelta(days=45),
-        status='fallback'
+        status='fallback'  # ⚠️ Valid response, but couldn't ensure uniqueness
     )
     return reply.id

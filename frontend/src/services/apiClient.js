@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+// Use relative URL so setupProxy middleware can intercept and forward correctly
+// setupProxy.js will route /api/* to http://backend:8000/api/*
+const API_BASE_URL = '/api';
 
 // Create axios instance with default config
 const apiClient = axios.create({

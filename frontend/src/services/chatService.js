@@ -12,12 +12,44 @@ import apiClient from './apiClient';
  * @returns {Promise} Response with upload ID
  */
 export const uploadChat = async (conversation) => {
+  // Validate input before sending
+  const trimmed = conversation.trim();
+  if (!trimmed) {
+    throw {
+      message: 'Please paste a conversation (at least 10 characters)',
+      original_text: ['Conversation text must be between 10 and 2000 characters.']
+    };
+  }
+  if (trimmed.length < 10) {
+    throw {
+      message: `Conversation too short (${trimmed.length} chars, need 10+)`,
+      original_text: ['Conversation text must be between 10 and 2000 characters.']
+    };
+  }
+  if (trimmed.length > 2000) {
+    throw {
+      message: `Conversation too long (${trimmed.length} chars, max 2000)`,
+      original_text: ['Conversation text must be between 10 and 2000 characters.']
+    };
+  }
+  
   try {
     const response = await apiClient.post('/novelty/upload/', {
       original_text: conversation,
     });
     return response.data;
   } catch (error) {
+    // Extract detailed error message
+    const errorData = error.response?.data;
+    if (errorData && errorData.original_text) {
+      const messages = Array.isArray(errorData.original_text) 
+        ? errorData.original_text[0] 
+        : errorData.original_text;
+      throw {
+        message: messages,
+        ...errorData
+      };
+    }
     throw error.response?.data || error;
   }
 };

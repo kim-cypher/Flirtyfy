@@ -66,26 +66,6 @@ function Dashboard() {
 
       {/* Main Content */}
       <div className="dashboard-content">
-        <div className="welcome-section">
-          <h1>Welcome back, {user?.username}!</h1>
-          <p>You are logged in to Flirty</p>
-        </div>
-
-        {/* User Information Card */}
-        <div className="user-info-card">
-          <h3>👤 Your Profile</h3>
-          <div className="user-info-details">
-            <div className="info-item">
-              <span className="info-label">Username:</span>
-              <span className="info-value">{user?.username}</span>
-            </div>
-            <div className="info-item">
-              <span className="info-label">Email:</span>
-              <span className="info-value">{user?.email}</span>
-            </div>
-          </div>
-        </div>
-
         {/* Features Navigation */}
         <div className="features-section">
           <h3>🚀 Available Features</h3>
@@ -114,32 +94,6 @@ function Dashboard() {
               >
                 Find Cities
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Start Guide */}
-        <div className="quick-start-section">
-          <h3>📚 Quick Start Guide</h3>
-          <div className="guide-item">
-            <span className="guide-number">1</span>
-            <div className="guide-content">
-              <h4>Go to Chat</h4>
-              <p>Paste the last 10 texts from a conversation and get an AI-generated reply</p>
-            </div>
-          </div>
-          <div className="guide-item">
-            <span className="guide-number">2</span>
-            <div className="guide-content">
-              <h4>Use Find Location</h4>
-              <p>Select a state and explore cities within 45 minutes (45km radius)</p>
-            </div>
-          </div>
-          <div className="guide-item">
-            <span className="guide-number">3</span>
-            <div className="guide-content">
-              <h4>Unique Responses</h4>
-              <p>All AI responses are unique and never repeat within 30 days</p>
             </div>
           </div>
         </div>
