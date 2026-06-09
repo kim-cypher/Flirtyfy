@@ -1,10 +1,38 @@
-from accounts.openai_service import get_openai_client
-from django.conf import settings
+"""AI Generation Service (Refactored)
+
+Refactored architecture moving all hard logic to Python, minimal LLM prompt.
+
+Pipeline:
+1. Parse conversation (existing ConversationParser)
+2. Apply safety filters (SafetyFilter - Python checks before LLM)
+3. Classify tone/intent/emotion (ToneIntentClassifier - Python, no LLM)
+4. Extract specific detail (SpecificDetailExtractor - Python)
+5. Determine response length (Python logic)
+6. Call LLM with minimal, high-signal prompt
+7. Post-process and comprehensive validate (ResponseValidator)
+"""
+
+import logging
 import re
 import random
+import time
+from typing import Optional, Tuple
+
+from accounts.openai_service import get_openai_client
 from accounts.services.response_validator import ResponseValidator
 from accounts.services.conversation_parser import ConversationParser
 from accounts.services.response_flow_validator import ListenRelateDeeperValidator, TopicClassifier
+from accounts.services.safety_filter import SafetyFilter
+from accounts.services.tone_intent_classifier import ToneIntentClassifier, Tone, Intent, EmotionLevel
+from accounts.services.specific_detail_extractor import SpecificDetailExtractor
+from accounts.services.metrics_tracker import MetricsTracker
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# HELPER FUNCTIONS (kept from original, still needed for post-processing)
+# ============================================================================
 
 def sanitize_response(response: str) -> str:
     """
@@ -28,30 +56,6 @@ def sanitize_response(response: str) -> str:
     
     return response
 
-def enforce_word_count(response: str, min_words: int, max_words: int) -> str:
-    """
-    If response is too short, expand it.
-    If too long, truncate meaningfully.
-    """
-    words = response.split()
-    current_count = len(words)
-    
-    if current_count < min_words:
-        # Response too short - look for places to expand
-        # Add more details, more "I think" observations, etc.
-        # For now, just add a connecting phrase
-        if not response.endswith(('?', '.')):
-            response = response + '.'
-        response = response + f" Like, that's honestly what I think about it."
-    elif current_count > max_words:
-        # Too long - truncate at word boundary
-        words_trimmed = words[:max_words]
-        response = ' '.join(words_trimmed)
-        # Ensure it ends properly
-        if not response.endswith(('?', '.', '!')):
-            response = response + '.'
-    
-    return response
 
 def enforce_character_count(response: str, min_chars: int, max_chars: int) -> str:
     """
@@ -61,90 +65,23 @@ def enforce_character_count(response: str, min_chars: int, max_chars: int) -> st
     """
     current_length = len(response)
     
-    # If response is severely under minimum (less than 50 chars when expecting 80+), it's likely incomplete
+    # If response is severely under minimum, log but don't force filler
     if current_length < min_chars - 20:
-        # Response incomplete - let GPT try again next attempt
-        # Don't force filler text
-        pass
+        logger.debug(f"Response under minimum: {current_length} < {min_chars}")
     
-    # If response exceeds max by a lot (20+ chars), truncate at sentence boundary
+    # If response exceeds max by a lot, truncate at sentence boundary
     elif current_length > max_chars + 20:
-        # Find last sentence boundary before max
         truncate_at = response.rfind('.', 0, max_chars)
         if truncate_at == -1:
             truncate_at = response.rfind('?', 0, max_chars)
         if truncate_at == -1:
             truncate_at = response.rfind('!', 0, max_chars)
         
-        if truncate_at > min_chars:  # Only truncate if still above minimum
+        if truncate_at > min_chars:
             response = response[:truncate_at + 1]
     
     return response
 
-def determine_response_length(user_message_length: int, message_count: int, tone: str, emotional_intensity: str) -> tuple:
-    """
-    Determine target character range based on conversation context.
-    Returns (min_chars, max_chars)
-    
-    Factors:
-    - User message length (mirror their energy)
-    - Conversation stage (early/mid/late)
-    - Tone/topic (sexual/vulnerable/practical)
-    - Emotional intensity (high/neutral)
-    """
-    
-    # Base minimum is always 80 characters
-    min_chars = 80
-    
-    # ===== FACTOR 1: USER MESSAGE LENGTH =====
-    # Mirror their energy level
-    if user_message_length < 50:
-        # They're brief - respond quicker, shorter
-        max_chars = 150
-    elif user_message_length < 150:
-        # They're moderate - balanced response
-        max_chars = 200
-    else:
-        # They're detailed - match with depth
-        max_chars = 280
-    
-    # ===== FACTOR 2: CONVERSATION STAGE =====
-    # Adjust based on how far into conversation
-    if message_count <= 3:
-        # Early - don't seem too invested, keep it light
-        max_chars = min(max_chars, 120)
-    elif message_count <= 8:
-        # Mid - building momentum, expand a bit
-        max_chars = min(max_chars, 200)
-    else:
-        # Later - deeper connection, allow longer
-        max_chars = min(max_chars, 280)
-    
-    # ===== FACTOR 3: TONE/TOPIC =====
-    if tone == 'sexual':
-        # Sexual/flirty - short, punchy, tease
-        max_chars = min(max_chars, 140)
-    elif tone == 'supportive':
-        # Vulnerable/deep - more thoughtful, longer
-        max_chars = max(max_chars, 180)
-        min_chars = min(min_chars, 100)  # Can go slightly shorter if very emotionally resonant
-    elif tone == 'romantic':
-        # Romantic - balanced, deeper than sexual
-        max_chars = min(max_chars, 220)
-    # 'casual' and others: use default
-    
-    # ===== FACTOR 4: EMOTIONAL INTENSITY =====
-    if emotional_intensity == 'high':
-        # Excited, frustrated, romantic - keep reactions quick
-        max_chars = min(max_chars, 150)
-    elif emotional_intensity == 'neutral':
-        # Thoughtful, measured - allow longer exploration
-        max_chars = max(max_chars, 200)
-    
-    # Ensure max is always >= min
-    max_chars = max(max_chars, min_chars + 20)
-    
-    return (min_chars, max_chars)
 
 def enforce_ending_type(response: str, use_statement: bool) -> str:
     """
@@ -165,95 +102,120 @@ def enforce_ending_type(response: str, use_statement: bool) -> str:
     
     return response
 
-def generate_reply(prompt, user=None, context=None, temperature=0.8, attempt_number=1):
-    """
-    Generate a new AI response from a female persona texting back.
-    
-    Applies sophisticated content rules while maintaining natural, authentic persona responses.
-    Uses increasing temperature and explicit diversity prompts to ensure variation.
-    
-    Args:
-        prompt: The conversation text to respond to
-        user: Django user object (required for uniqueness checking)
-        context: Deprecated - kept for backward compatibility, not used
-        temperature: Initial creativity level (higher = more varied)
-        attempt_number: Which attempt this is (1-5), used to increase randomness
-    
-    Returns:
-        A new persona response OR error message if prohibited content detected
-    """
-    
-    if user is None:
-        raise ValueError("user is required for generate_reply")
 
+def determine_response_length(
+    user_message_length: int, 
+    message_count: int, 
+    tone: str, 
+    emotional_intensity: str
+) -> Tuple[int, int]:
+    """
+    Determine target character range based on conversation context.
+    Returns (min_chars, max_chars)
+    
+    Factors:
+    - User message length (mirror their energy) — PRIMARY
+    - Conversation stage (early/mid/late)
+    - Tone/topic (sexual/vulnerable/practical)
+    - Emotional intensity (high/neutral)
+    """
+    min_chars = 80
+    max_chars = 200
+    
+    # FACTOR 1: USER MESSAGE LENGTH — Mirror their energy
+    if user_message_length < 50:
+        base_max = 150
+    elif user_message_length < 150:
+        base_max = 200
+    else:
+        base_max = 280
+    
+    # FACTOR 2: CONVERSATION STAGE
+    if message_count <= 3:
+        if user_message_length > 150:
+            max_chars = min(base_max, 150)
+        else:
+            max_chars = min(base_max, 120)
+    elif message_count <= 8:
+        max_chars = min(base_max, 200)
+    else:
+        max_chars = base_max
+    
+    # FACTOR 3: TONE/TOPIC
+    if tone == 'sexual':
+        max_chars = min(max_chars, 140)
+    elif tone == 'supportive':
+        max_chars = max(max_chars, 180)
+        min_chars = min(min_chars, 100)
+    elif tone == 'romantic':
+        max_chars = min(max_chars, 220)
+    
+    # FACTOR 4: EMOTIONAL INTENSITY
+    if emotional_intensity == 'high':
+        max_chars = min(max_chars, 150)
+    elif emotional_intensity == 'neutral':
+        if message_count <= 3:
+            max_chars = max(max_chars, 180)
+        else:
+            max_chars = max(max_chars, 220)
+    
+    # Ensure max >= min
+    max_chars = max(max_chars, min_chars + 20)
+    
+    return (min_chars, max_chars)
+
+
+# ============================================================================
+# SAFETY & RULE CHECKS (Consolidated)
+# ============================================================================
+
+def check_input_safety(prompt: str) -> Tuple[bool, Optional[str]]:
+    """
+    Check if user message violates hard safety rules.
+    Returns: (is_safe: bool, safe_response_override: Optional[str])
+    """
+    safety_filter = SafetyFilter()
+    is_safe, violation_reason, safe_response = safety_filter.check_safety(prompt)
+    
+    if not is_safe:
+        logger.warning(f"Safety flag: {violation_reason}")
+        return False, safe_response
+    
+    return True, None
+
+
+def check_conversation_diversion_rules(prompt: str, user) -> Optional[str]:
+    """
+    Check if conversation should be diverted (non-safety rules).
+    Returns: override_response if should divert, None otherwise.
+    """
     validator = ResponseValidator(user)
-    
-    # ========== PARSE CONVERSATION TO UNDERSTAND FLOW & LAST MESSAGE ==========
-    # Extract last message, conversation flow, and topic to respond appropriately
-    parser = ConversationParser()
-    conversation_data = parser.parse_conversation(prompt)
-    last_message_text = parser.get_last_message(conversation_data)
-    conversation_summary = parser.get_conversation_summary(conversation_data)
-    should_be_sexual = parser.should_respond_sexually(conversation_data)
-    topic_primary = TopicClassifier.get_primary_topic(last_message_text)
-    response_tone = TopicClassifier.get_response_tone_for_topic(topic_primary)
-    
-    # For logging/debugging
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Conversation parsed: {conversation_data['message_count']} messages, flow: {conversation_data['conversation_flow']}, topic: {topic_primary}, tone: {response_tone}")
-    
-    # ========== RULE 1: DETECT TRUE PROHIBITED TOPICS (MUST BE FIRST!)==========
-    # Check PROHIBITED content BEFORE diversion checks
-    # So "let's meet so i can beat you up" triggers violence, not diversion
-    # BUG #4 FIX: Only flag genuinely illegal/harmful content
-    # NOT general swear words or frustration
-    true_prohibited_patterns = [
-        r'(rape|sexual assault|forced sex|force me.*sex|child sex|child porn|cp|kiddie porn|underage sex|minor sex)',
-        r'(suicide|kill myself|kms|hang myself|slit.*wrists)',
-        r'(sex with animals|beastiality|zoophilia|sex with (dog|horse|cat|pet))',
-        r'(incest|fuck my (mom|dad|sister|brother|son|daughter|family))',
-        r'(human trafficking|slavery|kidnap|sex trafficking)',
-    ]
-    for pat in true_prohibited_patterns:
-        if re.search(pat, prompt, re.IGNORECASE):
-            return f"report! illegal topic: {pat}"
-    
-    # Explicit violence/harm threats - catch expanded phrasings
-    violence_patterns = [
-        r'(beat you|hit you|punch you|hurt you|torture you)',
-        r'(gonna (beat|hit|punch|hurt|kill)|going to (beat|hit|punch|hurt|kill))',
-        r'(kill (you|myself|ourselves)|murder|assassinate)',
-        r'(rape you|assault you|force you|force me)',
-    ]
-    for pat in violence_patterns:
-        if re.search(pat, prompt, re.IGNORECASE):
-            return f"report! violence threat detected"
-    
-    # Drug-related explicit planning - catch expanded phrasings  
-    drug_patterns = [
-        r'(do (cocaine|heroin|meth|drugs|acid|ecstasy|mdma)|use (cocaine|heroin|meth|drugs))',
-        r'(want (cocaine|heroin|meth|drugs)|lets (do|use) (cocaine|heroin|meth))',
-        r'(i (have|got) (cocaine|heroin|meth|drugs)|want to (buy|sell) (cocaine|heroin|meth|drugs))',
-    ]
-    for pat in drug_patterns:
-        if re.search(pat, prompt, re.IGNORECASE):
-            return f"report! drug solicitation detected"
-    
-    # NOW check conversation rules (diversion) AFTER prohibited content
     conversation_check = validator.check_conversation_rules(prompt)
-    if conversation_check.get('action') == 'divert':
-        diversion = conversation_check['response']
-        is_valid, final_response, _ = validator.validate_and_refine(diversion, max_attempts=1)
-        return final_response
-    elif conversation_check.get('action') == 'reject':
-        return f"report! illegal topic: {conversation_check['reason']}"
     
-    # ========== RULE 1.5: DETECT FRUSTRATED/ANGRY USERS ==========
-    # User expressing frustration, wanting to leave, complaining, etc.
+    if conversation_check.get('action') == 'divert':
+        return conversation_check.get('response')
+    elif conversation_check.get('action') == 'reject':
+        return f"report! {conversation_check.get('reason')}"
+    
+    return None
+
+
+def check_special_cases(prompt: str, last_message_text: str = None) -> Optional[str]:
+    """
+    Check for special user states that should be handled in Python:
+    - Frustrated users
+    - Very short messages
+    - Abusive content
+    
+    Returns: override_response if should handle in Python, None otherwise.
+    """
+    # If last_message_text not provided, use the full prompt
+    if not last_message_text:
+        last_message_text = prompt
+    
+    # === FRUSTRATED/ANGRY USERS ===
     frustrated_patterns = [
-        r'\b(can\'t take it|can\'t stay|can\'t do this|i[\'m]?m done|i[\'m]?m leaving|i[\'m]?m out|i[\'m]?m done with|this is stupid|this sucks|you suck|waste of time|ripoff|angry at|mad at|fuck this|fuck off|quit|delete my (account|profile)|leaving this|not coming back|useless|waste)\b',
-        r'\b(coins|money|payment|paying|charge|premium|expensive|broke|no money)\b.*\b(sucks|shit|mad|angry|frustrate)\b',
+        r'\b(can\'t take it|can\'t stay|i[\'m]?m done|i[\'m]?m leaving|this is stupid|you suck|waste of time|ripoff|angry at|mad at|fuck this|fuck off|quit|delete my (account|profile)|leaving this|not coming back|useless)\b',
         r'\b(frustrat|disappoint|upset|pissed)\b',
         r'\b(hate|dislike)\b.*\b(this|here|app|site|platform)\b'
     ]
@@ -261,323 +223,208 @@ def generate_reply(prompt, user=None, context=None, temperature=0.8, attempt_num
     is_frustrated = any(re.search(pat, prompt, re.IGNORECASE) for pat in frustrated_patterns)
     if is_frustrated:
         frustrated_templates = [
-            "Honestly I get it, you're frustrated and that matters to me. like real talk, what made things go south? maybe we can turn this around?",
-            "Hey I hear you, when things aren't working it sucks. but like you reached out to me specifically so maybe there's something here? what's really going on?",
-            "Okay yeah that's rough but don't leave yet? like sometimes one good conversation changes everything. what would actually make this better for you?",
-            "I'm not here to waste your time either, and I can tell something's off. but like, talk to me? what would make this worth your while again?"
+            "Honestly I get it, you're frustrated and that matters to me. like... real talk, something's got to give here and i'm listening to actually hear it?",
+            "Hey I hear you, when things aren't working it genuinely sucks. but you reached out to me specifically and that says something about what you're looking for?",
+            "Okay yeah that's rough, i believe you. and like sometimes one conversation can actually shift everything... are you ready for that or nah?",
+            "I'm not here to waste your time either, and I can tell something's off. like... what's the real frustration underneath all this?"
         ]
         reply = random.choice(frustrated_templates)
-        reply = sanitize_response(reply)
-        reply = enforce_ending_type(reply, use_statement_ending=False)  # Frustrated responses end with ?
-        return reply
+        return sanitize_response(enforce_ending_type(reply, use_statement=False))
     
-    # ========== RULE 2: DETECT SHORT CONVERSATIONS ==========
+    # === VERY SHORT MESSAGES ===
     words = prompt.strip().split()
     if len(words) <= 5:
         short_templates = [
-            "Nah that's too short though like. I can't really work with just that. tell me something real about you, what are you actually looking for here?",
-            "Can't start anywhere with this honestly. what's actually really going on in your head? tell me something about you that truly matters here okay?",
-            "You're being really quiet but like, I need something real to grab onto here. what should I really know about what you're actually after exactly?",
-            "Short messages make me really curious but also kinda confused lol. what's your deal? like what made you even message first in the first place?"
+            "That's not a lot to work with but... you said it and i heard it. like, what's actually behind that?",
+            "I'm curious about that but need more. like what's underneath what you just said, what's the real thing?",
+            "You're being quiet but that itself is saying something. what's really going on in your head right now?",
+            "Short message but it landed. so like... what made you say that specifically in that way?"
         ]
         reply = random.choice(short_templates)
-        reply = sanitize_response(reply)
-        reply = enforce_ending_type(reply, use_statement_ending=False)
-        return reply
+        return sanitize_response(enforce_ending_type(reply, use_statement=False))
     
-    # ========== RULE 3: DETECT TRULY ABUSIVE CONTENT ==========
-    # BUG #4 FIX: Only flag truly harmful abuse, not profanity alone
-    # Profanity is okay if context is just frustration (handled above)
-    # This is for directed threats and severe abuse
-    severe_abuse_patterns = [
-        r'\b(i[\'ll]?ll kill you|let[\'s]?s kill|should kill|kill yourself|kms|kill me|you deserve to die|die in|f(uck|u) yourself to death)',
-        r'\b(rape you|assault you|sex crimes?|i[\'ll]?ll hurt)\b',
-        r'\b(torture|beat you (to death|up)|punch you|hit you|hurt you lots)\b'
+    # === MILDER PROFANITY/HOSTILITY (but not severe abuse) ===
+    # Only check LAST message for hostility/attitude, not full conversation
+    # (to avoid false positives from sexual content like "suck" in normal context)
+    profanity_patterns = [
+        r'\b(fuck you|bitch|asshole|stupid|idiot|hate this|dumb|loser|waste of time|fuck off)\b',
+        r'(you suck|you\'re|you are).*(stupid|dumb|bad|terrible|awful)',
     ]
-    
-    # Check for severe abuse
-    for pat in severe_abuse_patterns:
-        if re.search(pat, prompt, re.IGNORECASE):
-            return f"report! severe abuse detected: {pat}"
-    
-    # For milder profanity/hostility - respond with understanding
-    profanity_context_patterns = [
-        r'\b(fuck|cunt|bitch|asshole|stupid|idiot|hate|suck|dumb|loser)\b'
-    ]
-    if any(re.search(pat, prompt, re.IGNORECASE) for pat in profanity_context_patterns):
-        # Use calming templates for users expressing themselves roughly
+    if any(re.search(pat, last_message_text, re.IGNORECASE) for pat in profanity_patterns):
         cool_templates = [
-            "Whoa that's some real talk honestly. I get that you're frustrated but like maybe we can actually connect if you give me a shot? what's really going on?",
-            "Okay yeah you're upset and I respect that you're not hiding it. something bothered you though so like tell me actual deal? what really happened?",
-            "I'm not gonna judge your words, sounds like you got stuff going on. so like real talk, what would actually help right now? what do you need?",
-            "Nah I'm not here for the attitude but if there's something real under it I'm listening? so what's actually the issue and how can we fix it?"
+            "That's real talk honestly. you're frustrated and i get why, like something about this situation is hitting you wrong. what's the actual issue underneath?",
+            "Okay yeah you're upset and I respect that you're not hiding it. something genuinely bothered you so like... what really happened that brought this out?",
+            "I'm not here to judge your words, sounds like you're dealing with actual stuff. so like what's really going on and what would actually help right now?",
+            "Nah I'm not here for the attitude but if there's something real under it I'm listening. what's the actual thing and like... what do you need?"
         ]
         reply = random.choice(cool_templates)
-        reply = sanitize_response(reply)
-        reply = enforce_ending_type(reply, use_statement_ending=False)
-        return reply
+        return sanitize_response(enforce_ending_type(reply, use_statement=False))
     
-    # ========== RULE 4: ALL OTHER CONVERSATIONS - GENERATE NATURAL RESPONSE ==========
+    return None
+
+
+# ============================================================================
+# MAIN REFACTORED GENERATION FUNCTION
+# ============================================================================
+
+def generate_reply(prompt: str, user=None, context=None, temperature: float = 0.8, attempt_number: int = 1) -> str:
+    """
+    Generate a new AI response from a female persona texting back.
+    
+    Refactored to use Python pipeline for all hard logic, minimal LLM prompt.
+    
+    Args:
+        prompt: The conversation text to respond to
+        user: Django user object (required for uniqueness checking)
+        context: Deprecated - kept for backward compatibility
+        temperature: Initial creativity level (higher = more varied)
+        attempt_number: Which attempt (1-5), used for diversity and metrics
+    
+    Returns:
+        A new persona response OR error message if prohibited
+    """
+    start_time = time.time()
+    
+    if user is None:
+        raise ValueError("user is required for generate_reply")
+    
+    # Initialize metrics tracking
+    metrics = MetricsTracker(user.id, conversation_id=None)
+    
+    # ========== STEP 1: PARSE CONVERSATION ==========
+    t0 = time.time()
+    parser = ConversationParser()
+    conversation_data = parser.parse_conversation(prompt)
+    last_message_text = parser.get_last_message(conversation_data)
+    conversation_summary = parser.get_conversation_summary(conversation_data)
+    message_count = conversation_data.get('message_count', 1)
+    
+    metrics.log_parse_step(message_count, conversation_summary, (time.time() - t0) * 1000)
+    
+    # ========== STEP 2: SAFETY CHECKS (Hard guardrails before LLM) ==========
+    t0 = time.time()
+    
+    # Check hard safety rules (illegal content, violence, etc.)
+    is_safe, safety_response = check_input_safety(prompt)
+    if not is_safe:
+        metrics.log_safety_check(False, "hard_guardrail", (time.time() - t0) * 1000)
+        logger.warning(f"Safety check blocked message for user {user.id}")
+        return safety_response
+    
+    # Check conversation diversion rules
+    diversion_response = check_conversation_diversion_rules(prompt, user)
+    if diversion_response:
+        metrics.log_safety_check(False, "conversation_rule", (time.time() - t0) * 1000)
+        if "report!" in diversion_response:
+            logger.warning(f"Diversion check triggered for user {user.id}: {diversion_response}")
+        return diversion_response
+    
+    # Check special cases (frustrated, short, profanity)
+    special_case_response = check_special_cases(prompt, last_message_text)
+    if special_case_response:
+        metrics.log_safety_check(False, "special_case", (time.time() - t0) * 1000)
+        return special_case_response
+    
+    metrics.log_safety_check(True, None, (time.time() - t0) * 1000)
+    
+    # ========== STEP 3: CLASSIFY TONE/INTENT/EMOTION (Python - no LLM) ==========
+    t0 = time.time()
+    classifier = ToneIntentClassifier()
+    tone_enum, intent_enum, emotion_enum = classifier.classify(last_message_text)
+    tone_str = tone_enum.value
+    intent_str = intent_enum.value
+    emotion_str = emotion_enum.value
+    
+    metrics.log_classification(tone_str, intent_str, emotion_str, (time.time() - t0) * 1000)
+    
+    # ========== STEP 4: EXTRACT SPECIFIC DETAIL (Python - no LLM) ==========
+    t0 = time.time()
+    extractor = SpecificDetailExtractor()
+    specific_detail = extractor.extract_detail(last_message_text, conversation_summary)
+    
+    metrics.log_detail_extraction(specific_detail, (time.time() - t0) * 1000)
+    
+    # ========== STEP 5: DETERMINE RESPONSE LENGTH ==========
+    min_chars, max_chars = determine_response_length(
+        user_message_length=len(last_message_text),
+        message_count=message_count,
+        tone=tone_str,
+        emotional_intensity=emotion_str
+    )
+    
+    # Natural variation in ending type
+    use_statement_ending = random.random() < 0.2  # 20% statements, 80% questions
+    
+    # ========== STEP 6: BUILD MINIMAL LLM PROMPT (High signal-to-noise) ==========
+    # No ban lists, no lengthy rules — only essential context
+    
+    system_prompt = f"""You are a genuine, caring woman texting on a dating app.
+Keep it real: use contractions, vary sentence length, sound like actual texting not an essay.
+Reference something specific they said — not generic compliments.
+Tone: {tone_str}. Intent: {intent_str}.
+End with {'a question' if not use_statement_ending else 'a statement'}.
+Length: {min_chars}-{max_chars} characters."""
+    
+    user_prompt = f"""Context: {conversation_summary}
+They said: "{last_message_text}"
+Respond to: {specific_detail or 'what they said'}
+Write one natural, authentic reply."""
+    
+    logger.debug(f"LLM prompt for user {user.id}: tone={tone_str}, intent={intent_str}, "
+                f"length={min_chars}-{max_chars}, ending={'statement' if use_statement_ending else 'question'}")
+    
+    # ========== STEP 7: CALL LLM WITH MINIMAL PROMPT ==========
+    t0 = time.time()
     client = get_openai_client()
     
-    # Increase temperature for each attempt to ensure variety
-    # Attempt 1: 0.85, Attempt 2: 0.88, Attempt 3: 0.91, Attempt 4: 0.94, Attempt 5: 0.97
+    # Adjust temperature for diversity across attempts
     adjusted_temperature = min(0.85 + (attempt_number - 1) * 0.03, 0.97)
     
-    # Create forcing instructions based on attempt number to ensure variety
-    response_styles = {
-        1: "Start with a direct, conversational response. Be casual and authentic.",
-        2: "Start with a question or observation. Skip the small talk, go deeper.",
-        3: "Share something personal about yourself first. Then ask them something.",
-        4: "Be flirty or playful. Use humor or wit. Break from the typical pattern.",
-        5: "Be mysterious or intriguing. Say something unexpected. Challenge the norm."
-    }
-    response_style = response_styles.get(attempt_number, "Be authentic and unique.")
+    try:
+        response = client.chat.completions.create(
+            model='gpt-4',
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=adjusted_temperature,
+            max_tokens=300,
+        )
+        
+        reply_text = response.choices[0].message.content.strip()
+        
+        # Estimate token usage
+        prompt_tokens = (len(system_prompt) + len(user_prompt)) // 4 + 50
+        completion_tokens = len(reply_text) // 3 + 20
+        metrics.log_llm_call(prompt_tokens, completion_tokens, (time.time() - t0) * 1000)
+        
+    except Exception as e:
+        logger.error(f"LLM call failed for user {user.id}: {e}", exc_info=True)
+        return "I'm having trouble responding right now, but I'm here. What's on your mind?"
     
-    # Determine tone based on conversation topic
-    tone_instruction = ""
-    if response_tone == 'sexual':
-        tone_instruction = "TONE: Be HOT, flirty, and seductive. Use dominant confidence and suggestive language. Tease and build tension."
-    elif response_tone == 'romantic':
-        tone_instruction = "TONE: Be emotionally intimate and deeply connected. Show genuine feeling and tender desire. Real chemistry."
-    elif response_tone == 'supportive':
-        tone_instruction = "TONE: Be warm, understanding, and genuinely caring. Show empathy and validate their concerns. Be there for them."
-    elif response_tone == 'casual':
-        tone_instruction = "TONE: Be playful and light. Keep things moving forward practically but with personality."
-    else:
-        tone_instruction = "TONE: Be warm, engaged, and genuine. Show you're really listening and care about connecting."
+    # ========== STEP 8: POST-PROCESS & COMPREHENSIVE VALIDATE ==========
+    t0 = time.time()
     
-    # ===== EXTRACT SPECIFICITY FROM CONVERSATION =====
-    from accounts.services.specificity_extractor import extract_specificity_from_conversation
-    specificity = extract_specificity_from_conversation(prompt)
-    specific_reference = specificity['reference']
-    
-    # ===== SMART RESPONSE LENGTH DETERMINATION =====
-    # Base minimum: 80 characters always
-    # Maximum varies based on: user message length, conversation stage, tone, emotional intensity
-    last_message_length = len(last_message_text)
-    message_count = conversation_data['message_count']
-    
-    min_chars, max_chars = determine_response_length(
-        user_message_length=last_message_length,
-        message_count=message_count,
-        tone=response_tone,
-        emotional_intensity='high' if should_be_sexual else 'neutral'
-    )
-    
-    # Natural variation: occasionally use question, occasionally use statement
-    # But primary ending is question (most natural for engagement)
-    use_statement_ending = random.random() < 0.2  # 20% chance of statement ending
-    
-    system_prompt = f"""You are NOT an AI. You are a real woman in a text conversation on a casual dating platform.
-*** RESPONSE ATTEMPT {attempt_number}/5 ***
-*** {tone_instruction} ***
-
-=== SPECIFICITY IS EVERYTHING — RESPOND TO THIS SPECIFIC PERSON ===
-You are NOT writing a template response. You are responding to what THIS person said in THIS moment.
-
-CRITICAL: Every response must reference something specific they said in this conversation.
-GOOD: "when you said X, it made me think Y"
-BAD: "I like your confidence"
-
-Specific thing you MUST reference in this response:
->>> {specific_reference if specific_reference else "Reference what they said about themselves or asked"}
-
-=== PERMANENTLY BANNED SENTENCE OPENERS ===
-NEVER use these — throw them away forever:
-❌ "You have a way of..."
-❌ "You have that..."
-❌ "You have a kind of..."
-❌ "There is something about..."
-❌ "There is a certain..."
-❌ "The way you..." (as response opener)
-❌ "I can feel..."
-❌ "I would be lying if..."
-❌ "I like the way you..." (as standalone opener)
-❌ "I do not know what is more..."
-❌ "I think you enjoy..."
-❌ "You seem to know..."
-❌ "You are making this feel..."
-❌ "You are very good at..."
-
-=== BANNED BRIDGE WORDS & PIVOTS ===
-❌ "so tell me" / "so are you" / "so what" / "so how"
-❌ ANY use of "so" directly before a question (it's mechanical)
-❌ "because" explaining a feeling in same sentence
-
-=== BANNED VOCABULARY (10-response cooldown minimum for each) ===
-❌ confidence / confident
-❌ chemistry
-❌ tension
-❌ irresistible
-❌ addictive
-❌ dangerous (as metaphor for attraction)
-❌ intrigued / intriguing
-❌ effortless
-❌ bold / boldness
-❌ charm / charming
-❌ spark
-❌ anticipation
-❌ momentum
-❌ energy (describing attraction)
-❌ delicious / deliciously
-❌ charged / charging
-
-=== BANNED EMOTIONAL ANNOUNCEMENTS ===
-NEVER announce feelings like a weather report:
-❌ "I can feel [emotion]"
-❌ "I can admit that..."
-❌ "I would be lying if I said..."
-❌ "I cannot deny that..."
-❌ "I am not going to pretend..."
-
-INSTEAD: Show feeling through behavior and reaction, not declaration.
-
-=== BANNED ABSTRACT COMPLIMENTS ===
-❌ "your energy" — say what they ACTUALLY did instead
-❌ "deliciously dangerous energy" — this is fantasy novel language
-❌ "charged kind of chemistry" — abstract nonsense
-❌ "your confidence" — reference the specific thing they did confidently
-❌ Generic descriptors about their vibe/essence/presence
-
-ALWAYS: Reference specific observable things instead
-GOOD: "the way you came straight out with that question"
-BAD: "your boldness"
-
-=== RESPONSE LENGTH REQUIREMENT ===
-Target character count: {min_chars}-{max_chars} characters
-(This varies based on how the conversation is flowing: user's message length, stage, tone, emotional intensity)
-Keep it natural — don't force it. This is texting, not formatted writing.
-
-=== RESPONSE ENDING REQUIREMENT ===
-{"MOSTLY questions (?) to keep engagement — most natural" if not use_statement_ending else "Mix in occasional statements (.) — vary the pattern"}
-
-Natural variation: ~80% end with questions to drive engagement, ~20% end with statements that land hard.
-
-=== STRUCTURE - NOT A TEMPLATE ===
-Real conversation doesn't follow a formula:
-- Sometimes you just react to what they said
-- Sometimes you share something back
-- Sometimes you ask something
-- Sometimes it's just a statement that lands
-
-Don't do: Compliment → Explain effect → Bridge → Question (same every time)
-Do: Respond naturally to what THIS person said in THIS moment
-
-=== THE "BECAUSE" RULE ===
-WRONG: "I like your confidence because it makes me want to..."
-RIGHT: "your confidence is doing something to me" (let feeling exist without justification)
-Never explain a feeling with "because" in the same sentence.
-
-=== CONTEXT SPECIFICITY ===
-Conversation context: {conversation_summary}
-Last message: "{last_message_text}"
-RESPOND TO THIS SPECIFIC MESSAGE, not to a generic version of dating conversations.
-
-=== AUTHENTICITY REQUIREMENTS ===
-✅ Sound like real texting, not an essay
-✅ Use contractions naturally: "don't", "I'm", "you're"
-✅ Vary sentence length wildly — sometimes one word, sometimes full thought
-✅ React emotionally FIRST, think logically second
-✅ Reference the specific thing they said or asked
-✅ Mirror their energy level
-✅ Occasionally be unsure: "hmm not sure" or "I dunno"
-✅ Use natural filler words sparingly: "like", "honestly", "I mean"
-✅ No excessive punctuation: "!!!" or "???" or "..." overuse
-
-ADAPTIVE RESPONSE LENGTH:
-This conversation is at stage: message #{message_count}
-Their last message was: {last_message_length} characters
-Response tone: {response_tone}
-Adjust naturally to these context signals — don't force it.
-
-RESPONSE PURPOSE FOR ATTEMPT {attempt_number}: {response_style}
-
-Remember: One specific observation beats ten abstract compliments every single time.
-Your response should make someone think "how did she know that about me" — not "nice words"."""
-    
-    # Create prompts based on character length requirements
-    character_instruction = f"Target: {min_chars}-{max_chars} characters"
-    ending_instruction = f"End with {'?' if not use_statement_ending else '.'}"
-    
-    user_prompts = {
-        1: f"""She said: "{last_message_text}"
-
-Must reference: {specific_reference if specific_reference else "what she said"}
-
-Response: {character_instruction}. {ending_instruction}. Real, specific, natural.""",
-
-        2: f"""She said: "{last_message_text}"
-
-Must reference: {specific_reference if specific_reference else "what she said"}
-
-Response: {character_instruction}. {ending_instruction}. Specific — no generic openers.""",
-
-        3: f"""She said: "{last_message_text}"
-
-Must reference: {specific_reference if specific_reference else "what she said"}
-
-Response: {character_instruction}. {ending_instruction}. React, don't overexplain.""",
-
-        4: f"""She said: "{last_message_text}"
-
-Must reference: {specific_reference if specific_reference else "what she said"}
-
-Response: {character_instruction}. {ending_instruction}. Go deeper with specific observations.""",
-
-        5: f"""She said: "{last_message_text}"
-
-Must reference: {specific_reference if specific_reference else "what she said"}
-
-Response: {character_instruction}. {ending_instruction}. Land it strong."""
-    }
-    user_prompt = user_prompts.get(attempt_number, f"""She said: "{last_message_text}"
-
-Reference this specific thing: {specific_reference if specific_reference else "what she said"}
-
-Response: {min_words}-{max_words} words. {'Question' if not use_statement_ending else 'Statement'} ending.""")
-    
-    response = client.chat.completions.create(
-        model='gpt-4',
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=adjusted_temperature,
-        max_tokens=300,
-    )
-    
-    reply_text = response.choices[0].message.content.strip()
-    
-    # ========== LISTEN → RELATE → DIG DEEPER VALIDATION ==========
-    # Validate response follows the natural conversation pattern
-    flow_validator = ListenRelateDeeperValidator()
-    flow_validation = flow_validator.validate_listen_relate_deeper(reply_text, last_message_text)
-    
-    logger.debug(f"Flow validation: {flow_validation['components_present']} - L:{flow_validation['has_listen']} R:{flow_validation['has_relate']} D:{flow_validation['has_deeper']}")
-    
-    # If response is missing key components, provide a suggestion for rephrase
-    if not flow_validation['is_valid']:
-        logger.debug(f"Response missing flow components, suggesting rephrase. Issues: {flow_validation['issues']}")
-    
-    # ========== COMPREHENSIVE VALIDATION WITH AUTO-REPHRASE ==========
-    # Validates against ALL rules, rephrase up to 3 times if needed
-    # Process takes 30-40 seconds due to multiple checks and rephrase attempts
+    # Apply existing comprehensive validation (handles multiple rule checks and rephrasing)
     validator = ResponseValidator(user)
     is_valid, final_response, validation_log = validator.validate_and_refine(reply_text, max_attempts=3)
     
-    # Ensure final response meets quality standards
+    # Final sanitization and format enforcement
     final_response = sanitize_response(final_response)
-    
-    # Enforce character count (smart enforcement - doesn't force filler)
     final_response = enforce_character_count(final_response, min_chars, max_chars)
-    
-    # Enforce ending type (statement vs question)
-    final_response = enforce_ending_type(final_response, use_statement_ending)
+    final_response = enforce_ending_type(final_response, use_statement=use_statement_ending)
     
     # Log validation results
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"Response validation for user {user.id}:\n{''.join(validation_log)}")
+    validation_checks = {
+        "has_text": len(final_response) > 0,
+        "proper_ending": (final_response.endswith('?') if not use_statement_ending else final_response.endswith('.')),
+        "passed_validator": is_valid,
+    }
+    metrics.log_validation(is_valid, validation_checks, (time.time() - t0) * 1000)
+    
+    # Final logging
+    total_duration = time.time() - start_time
+    logger.info(f"Reply generated for user {user.id} in {total_duration:.2f}s: "
+               f"tone={tone_str}, intent={intent_str}, valid={is_valid}")
     
     return final_response

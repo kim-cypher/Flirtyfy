@@ -201,13 +201,10 @@ INSTALLED_APPS += ['django_celery_results']
 # OpenAI API Key - Get from: https://platform.openai.com/api/keys
 
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
-GEONAMES_USERNAME = env("GEONAMES_USERNAME", default="")
 
 # Log warning if API keys are not set
 if not OPENAI_API_KEY:
     print("⚠️ WARNING: OPENAI_API_KEY not set in environment variables")
-if not GEONAMES_USERNAME:
-    print("⚠️ WARNING: GEONAMES_USERNAME not set in environment variables")
 
 # Django Channels Configuration (for WebSocket support)
 # This connects to your WSL Redis instance

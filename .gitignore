@@ -1,0 +1,188 @@
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+*.md
+!README.md
+!DEPLOYMENT.md
+
+# ============================================================================
+# PYTHON / DJANGO
+# ============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+/media
+/staticfiles
+/static
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ============================================================================
+# FRONTEND / REACT / NODE
+# ============================================================================
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+/dist
+.next/
+out/
+
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ============================================================================
+# IDE / EDITOR
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.atom/
+.vscode-test
+.history/
+*.code-workspace
+
+# ============================================================================
+# OS FILES
+# ============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# ============================================================================
+# DATABASE / CACHE
+# ============================================================================
+*.sqlite
+*.sqlite3
+*.db
+.redis/
+redis_data/
+*.rdb
+
+# ============================================================================
+# DOCKER
+# ============================================================================
+.dockerignore
+.docker/
+
+# ============================================================================
+# CREDENTIALS & SECRETS
+# ============================================================================
+.ssh/
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# ============================================================================
+# BUILD & TEMPORARY FILES
+# ============================================================================
+*.tmp
+*.bak
+*.swp
+*.swo
+~*
+.tmp/
+temp/
+tmp/
+
+# ============================================================================
+# MISCELLANEOUS
+# ============================================================================
+.git/
+.gitattributes
+*.orig
+*.rej
+__pycache__
+.Python
+*.so
+.env.prod
+.env.staging

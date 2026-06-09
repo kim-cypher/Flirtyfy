@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import RegisterView, LoginView, ChatView, LocationSearchView
+from .views import RegisterView, LoginView, ChatView, GenerateSpecificResponseView, GenerateButtonResponseView
 from .health_check import (
     health_basic,
     health_detailed,
@@ -19,7 +19,10 @@ urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('login/', LoginView.as_view(), name='login'),
     
-    # Chat and location endpoints (require authentication)
+    # Chat endpoints (require authentication)
     path('chat/', ChatView.as_view(), name='chat'),
-    path('locations/', LocationSearchView.as_view(), name='locations'),
+    
+    # New button system endpoints (require authentication)
+    path('chat/generate-specific/', GenerateSpecificResponseView.as_view(), name='generate-specific'),
+    path('chat/generate-button/', GenerateButtonResponseView.as_view(), name='generate-button'),
 ]

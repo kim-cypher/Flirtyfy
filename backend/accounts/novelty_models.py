@@ -22,6 +22,21 @@ class AIReply(models.Model):
     expires_at = models.DateTimeField(db_index=True)
     status = models.CharField(max_length=32, default='pending', db_index=True)
     error = models.TextField(blank=True, null=True)
+    # New fields for button system (LEFT and RIGHT sides)
+    conversation_context = models.TextField(null=True, blank=True, help_text="Original pasted conversation (LEFT side)")
+    intent_type = models.CharField(
+        max_length=10,
+        choices=[('specific', 'Specific'), ('button', 'Button')],
+        null=True,
+        blank=True,
+        help_text="Whether response was generated from pasted conversation (specific) or button click (button)"
+    )
+    button_intent = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Button name if intent_type='button' (e.g., 'morning_flirt', 'sensual')"
+    )
 
     class Meta:
         indexes = [

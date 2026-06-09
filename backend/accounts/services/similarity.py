@@ -21,11 +21,12 @@ def get_embedding(text):
         return None
 
 
-def semantic_similar_replies(user, embedding, since, threshold=0.95):
+def semantic_similar_replies(user, embedding, since, threshold=0.90):
     """
     Find semantically similar replies using embeddings with pgvector.
     Uses L2 distance to find similar vectors.
-    VERY STRICT threshold (0.95) to only allow truly diverse responses.
+    VERY STRICT threshold (0.90 = 90% similar) to only allow truly diverse responses.
+    Lower = MORE strict about duplicates.
     """
     from accounts.novelty_models import AIReply
     from django.db.models import F, FloatField
@@ -48,11 +49,12 @@ def semantic_similar_replies(user, embedding, since, threshold=0.95):
     return similar_replies
 
 
-def lexical_similar_replies(user, normalized_text, since, threshold=0.95):
+def lexical_similar_replies(user, normalized_text, since, threshold=0.90):
     """
     Find lexically similar replies using text similarity.
     Compares normalized text fields.
-    VERY STRICT threshold (0.95) to catch near-identical text.
+    VERY STRICT threshold (0.90 = 90% similar) to catch near-identical text.
+    Lower = MORE strict about duplicates.
     """
     from accounts.novelty_models import AIReply
     from difflib import SequenceMatcher
