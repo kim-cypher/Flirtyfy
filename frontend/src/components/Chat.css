@@ -42,6 +42,31 @@
   letter-spacing: 0.5px;
 }
 
+/* ── Flirtyfy logo wordmark ────────────────────────────── */
+.flirtyfy-wordmark {
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  user-select: none;
+}
+
+.flirtyfy-word-flirty {
+  background: linear-gradient(135deg, #e05fa0 0%, #9333ea 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.flirtyfy-word-fy {
+  background: linear-gradient(135deg, #9333ea 0%, #6c4fc9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .header-subtitle {
   margin: 0;
   color: #999;
@@ -79,6 +104,24 @@
   transform: scale(0.98);
 }
 
+.credits-badge {
+  padding: 8px 14px;
+  background: #1a1a38;
+  border: 1.5px solid #6c4fc9;
+  border-radius: 999px;
+  color: #c8bcf0;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 0 10px rgba(108, 79, 201, 0.2);
+}
+
+.credits-badge:hover {
+  background: #22224a;
+  box-shadow: 0 0 14px rgba(108, 79, 201, 0.4);
+}
+
 .user-name {
   color: #8b7bc9;
   font-size: 12px;
@@ -106,6 +149,131 @@
 
 .btn-logout:active {
   transform: translateY(0);
+}
+
+/* Global time bar — full width below header, applies to both panels */
+.time-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 24px;
+  background: #0b0b1e;
+  border-bottom: 1px solid #1e1e38;
+  flex-shrink: 0;
+}
+
+.time-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4a4470;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.time-chip {
+  flex: 1;
+  padding: 10px 6px;
+  background: #0e0e24;
+  border: 1.5px solid #22223a;
+  border-radius: 9px;
+  color: #6a6490;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  min-height: 44px;
+}
+
+.time-chip.active {
+  background: #1a1a38;
+  border-color: #6c4fc9;
+  color: #c8bcf0;
+  box-shadow: 0 0 10px rgba(108, 79, 201, 0.3);
+}
+
+.time-chip:hover:not(.active) {
+  border-color: #3a3a60;
+  color: #9088bc;
+  background: #131328;
+}
+
+@media (max-width: 768px) {
+  .time-bar { padding: 8px 16px; gap: 5px; }
+  .time-chip { font-size: 11px; min-height: 40px; }
+}
+
+@media (max-width: 480px) {
+  .time-bar { padding: 6px 10px; gap: 4px; }
+  .time-bar-label { display: none; }
+  .time-chip { font-size: 10px; padding: 8px 3px; min-height: 38px; }
+}
+
+/* Time check-in modal */
+.time-checkin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 15, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.time-checkin-modal {
+  background: #131328;
+  border: 1.5px solid #2a2a44;
+  border-radius: 12px;
+  padding: 22px 24px;
+  max-width: 360px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.time-checkin-text {
+  margin: 0 0 16px 0;
+  color: #d8ccf8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.time-checkin-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.time-checkin-btn {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid #2a2a44;
+  transition: all 0.15s ease;
+}
+
+.time-checkin-btn.keep {
+  background: #1a1a38;
+  color: #c8bcf0;
+  border-color: #6c4fc9;
+}
+
+.time-checkin-btn.keep:hover {
+  background: #22224a;
+}
+
+.time-checkin-btn.switch {
+  background: #0e0e24;
+  color: #9088bc;
+}
+
+.time-checkin-btn.switch:hover {
+  border-color: #3a3a60;
+  color: #c8bcf0;
 }
 
 /* Chat Interface Wrapper */

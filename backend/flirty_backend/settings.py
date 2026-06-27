@@ -171,6 +171,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
     ],
+    # Used by accounts.throttles — applied only to the AI-generation endpoints,
+    # not globally, since other endpoints (login, register) don't need this.
+    'DEFAULT_THROTTLE_RATES': {
+        'generation_burst': '20/min',
+        'generation_daily': '300/day',
+        'payment_initiate': '5/min',
+    },
 }
 
 
@@ -194,17 +201,46 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# Periodic tasks — requires a `celery beat` process running (see docker-compose.yml)
+from celery.schedules import crontab  # noqa: E402
+CELERY_BEAT_SCHEDULE = {
+    'cleanup-expired-replies': {
+        'task': 'accounts.tasks.cleanup_expired_replies',
+        'schedule': crontab(hour=3, minute=0),  # daily, low-traffic hour
+    },
+}
+
 # Django Celery Results
 INSTALLED_APPS += ['django_celery_results']
 
 # API Configuration
-# OpenAI API Key - Get from: https://platform.openai.com/api/keys
-
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 
-# Log warning if API keys are not set
-if not OPENAI_API_KEY:
-    print("⚠️ WARNING: OPENAI_API_KEY not set in environment variables")
+if not ANTHROPIC_API_KEY:
+    print("⚠️ WARNING: ANTHROPIC_API_KEY not set in environment variables")
+
+# M-Pesa Daraja API — see accounts/services/mpesa_service.py for the full
+# contract. Blank by default; payments cannot work until real credentials
+# from https://developer.safaricom.co.ke are set, and MPESA_CALLBACK_URL is
+# a publicly reachable HTTPS URL (Safaricom cannot call localhost).
+MPESA_ENV = env("MPESA_ENV", default="sandbox")  # 'sandbox' or 'production'
+MPESA_CONSUMER_KEY = env("MPESA_CONSUMER_KEY", default="")
+MPESA_CONSUMER_SECRET = env("MPESA_CONSUMER_SECRET", default="")
+MPESA_SHORTCODE = env("MPESA_SHORTCODE", default="174379")  # 174379 = Daraja's public sandbox test shortcode
+MPESA_PASSKEY = env("MPESA_PASSKEY", default="")
+MPESA_CALLBACK_URL = env("MPESA_CALLBACK_URL", default="")
+
+if MPESA_ENV == "production" and not (MPESA_CONSUMER_KEY and MPESA_PASSKEY and MPESA_CALLBACK_URL):
+    print("⚠️ WARNING: MPESA_ENV=production but credentials/callback URL are incomplete")
+
+# Subscription pricing — $10 USD, quoted to M-Pesa in KES (M-Pesa only
+# transacts in KES). The KES amount and click count are both starting
+# assumptions — confirm the real exchange rate and adjust SUBSCRIPTION_CLICKS
+# to taste before going live.
+SUBSCRIPTION_PRICE_USD = 10
+SUBSCRIPTION_PRICE_KES = env.int("SUBSCRIPTION_PRICE_KES", default=1300)
+SUBSCRIPTION_CLICKS = env.int("SUBSCRIPTION_CLICKS", default=200)
 
 # Django Channels Configuration (for WebSocket support)
 # This connects to your WSL Redis instance
@@ -217,5 +253,19 @@ CHANNEL_LAYERS = {
     }
 }
 
-# Test Configuration
-TEST_RUNNER = 'accounts.test_runner.PGVectorTestRunner'
+# Logging — without this, logger.info() calls anywhere in the app are
+# silently dropped (Python's root logger defaults to WARNING). This makes
+# them print to stdout, which gunicorn/docker compose logs picks up.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}

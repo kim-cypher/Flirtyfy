@@ -1,320 +1,167 @@
-/**
- * RightPanel.css - Styling for RIGHT SIDE buttons panel
- * Dark purple theme with button grid
- */
+/* RightPanel — 6×6 compact grid */
 
 .right-panel {
-  flex: 1;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border-left: 2px solid #6c4fc9;
-  overflow-y: auto;
-  padding: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  gap: 12px;
 }
 
-.right-panel-container {
-  padding: 30px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  flex: 1;
+.right-panel-header {
+  margin-bottom: 18px;
 }
 
 .right-panel-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #e0e0e0;
-  margin: 0 0 10px 0;
-  text-align: center;
+  margin: 0 0 5px 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #e0d4f8;
+  letter-spacing: 0.3px;
 }
 
-/* Buttons Grid */
+.right-panel-subtitle {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e0d4f8;
+  line-height: 1.5;
+}
+
+
+/* 6-column grid */
 .buttons-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  min-height: 300px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 7px;
 }
 
-@media (min-width: 1600px) {
-  .buttons-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 1024px) {
-  .buttons-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .buttons-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-}
-
-/* Individual Buttons */
+/* Individual button — label only, no emoji */
 .scenario-button {
-  padding: 16px 12px;
-  border: 2px solid #4a4a6a;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #2a2a4a 0%, #1f1f3a 100%);
-  color: #e0e0e0;
-  font-size: 13px;
-  font-weight: 600;
+  position: relative;
+  padding: 8px 5px;
+  background: #131328;
+  border: 1.5px solid #2a2a44;
+  border-radius: 9px;
+  color: #b0a8d0;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
+  text-align: center;
+  min-height: 48px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  position: relative;
-  min-height: 60px;
-  text-align: center;
-  white-space: normal;
+  overflow: hidden;
 }
 
 .button-label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #b0a8d0;
   display: block;
-  line-height: 1.4;
+  word-break: break-word;
+  text-align: center;
+  max-width: 100%;
+  padding: 0 3px;
+  letter-spacing: 0.2px;
 }
 
 .scenario-button:hover:not(:disabled) {
-  border-color: #8b7bc9;
-  background: linear-gradient(135deg, #3a3a5a 0%, #2f2f4a 100%);
-  box-shadow: 0 0 15px rgba(139, 123, 201, 0.3);
-  transform: translateY(-3px);
-  color: #fff;
-}
-
-.scenario-button:active:not(:disabled) {
+  background: #1e1e40;
+  border-color: #6c4fc9;
+  color: #d8ccf8;
+  box-shadow: 0 2px 10px rgba(108, 79, 201, 0.25);
   transform: translateY(-1px);
 }
 
-.scenario-button:disabled {
-  background: linear-gradient(135deg, #1a1a2a 0%, #0f0f1f 100%);
-  border-color: #2a2a4a;
-  color: #666;
-  cursor: not-allowed;
-  opacity: 0.6;
+.scenario-button:hover:not(:disabled) .button-label {
+  color: #c8bcf0;
 }
 
-/* Loading state */
+.scenario-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.scenario-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .scenario-button.loading {
-  background: linear-gradient(135deg, #4a4a6a 0%, #3a3a5a 100%);
+  background: #1e1e40;
   border-color: #6c4fc9;
-  box-shadow: 0 0 20px rgba(108, 79, 201, 0.4);
+  box-shadow: 0 0 12px rgba(108, 79, 201, 0.3);
+  cursor: wait;
+}
+
+/* Spinner replaces label while loading */
+.scenario-button.loading .button-label {
+  display: none;
 }
 
 .button-spinner {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #9b78f0;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Error message */
-.right-panel .error-message {
-  padding: 12px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: rgba(255, 107, 107, 0.1);
-  border: 1px solid #ff6b6b;
-  color: #ff8787;
-  margin-top: 10px;
-}
-
-.error-icon {
-  font-size: 16px;
+  animation: spin 0.7s linear infinite;
   flex-shrink: 0;
 }
 
-/* Instructions */
-.button-instructions {
-  padding: 16px;
-  background-color: rgba(108, 79, 201, 0.1);
-  border: 1px solid #4a4a6a;
-  border-radius: 6px;
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.instruction-title {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.button-instructions ul {
-  margin: 0;
-  padding: 0 0 0 20px;
-  list-style: none;
-  font-size: 12px;
-  color: #999;
-  line-height: 1.6;
-}
-
-.button-instructions li {
-  margin-bottom: 4px;
-}
-
-.button-instructions li::before {
-  content: '→ ';
-  color: #6c4fc9;
-  margin-right: 4px;
-}
-
-/* Legend */
-.button-legend {
-  padding: 16px;
-  background-color: rgba(66, 165, 245, 0.05);
-  border: 1px solid #4a4a6a;
-  border-radius: 6px;
-}
-
-.legend-title {
-  margin: 0 0 12px 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.legend-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.legend-item {
+/* Section divider between main and extra button rows */
+.buttons-section-divider {
   display: flex;
-  flex-direction: column;
-  padding: 8px;
-  background-color: rgba(108, 79, 201, 0.1);
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-.legend-label {
-  color: #8b7bc9;
-  font-weight: 600;
-}
-
-.legend-desc {
-  color: #999;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+  color: #7060a0;
   font-size: 10px;
-  margin-top: 2px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
 }
 
-.expand-legend-button {
-  width: 100%;
-  padding: 8px;
-  background-color: #2a2a4a;
-  border: 1px solid #4a4a6a;
-  border-radius: 4px;
-  color: #999;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.buttons-section-divider::before,
+.buttons-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #2a2a44;
 }
 
-.expand-legend-button:hover {
-  background-color: #3a3a5a;
-  border-color: #6c4fc9;
-  color: #ccc;
-}
-
-.full-legend {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease;
-  margin-top: 12px;
-}
-
-.full-legend.visible {
-  max-height: 500px;
+/* Error */
+.right-panel .error-message {
+  padding: 9px 12px;
+  border-radius: 7px;
+  font-size: 12px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 7px;
+  background: rgba(224, 85, 85, 0.1);
+  border: 1px solid rgba(224, 85, 85, 0.35);
+  color: #ff8a8a;
 }
 
-.legend-item-full {
-  font-size: 11px;
-  color: #999;
-  padding: 8px;
-  background-color: rgba(108, 79, 201, 0.1);
-  border-radius: 4px;
-  line-height: 1.4;
+/* Wider screens — a touch more room */
+@media (min-width: 1400px) {
+  .scenario-button { min-height: 54px; padding: 10px 5px; }
+  .button-label    { font-size: 12px; }
 }
 
-.legend-item-full strong {
-  color: #8b7bc9;
+/* Narrow panels — keep 6 columns, scale down slightly */
+@media (max-width: 900px) {
+  .scenario-button { min-height: 42px; padding: 7px 3px; }
+  .button-label    { font-size: 10px; }
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-  .right-panel {
-    border-left: none;
-    border-top: 2px solid #6c4fc9;
-  }
-
-  .right-panel-container {
-    padding: 20px;
-    gap: 15px;
-  }
-
-  .right-panel-title {
-    font-size: 20px;
-  }
-
-  .buttons-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .right-panel-container {
-    padding: 15px;
-  }
-
-  .buttons-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-
-  .scenario-button {
-    padding: 12px 10px;
-    font-size: 12px;
-    min-height: 50px;
-  }
-}
-
-@media (max-width: 480px) {
-  .buttons-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .scenario-button {
-    padding: 14px 16px;
-    min-height: 45px;
-  }
+/* Mobile — drop to 3 columns so buttons stay readable */
+@media (max-width: 600px) {
+  .buttons-grid    { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .scenario-button { min-height: 50px; padding: 9px 6px; }
+  .button-label    { font-size: 12px; }
 }

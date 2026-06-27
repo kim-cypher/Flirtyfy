@@ -1,0 +1,160 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getCredits, initiatePayment, getPaymentStatus } from '../services/creditsAPI';
+import FlirtyfyLogo from './FlirtyfyLogo';
+import './Subscribe.css';
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 120000; // give up after 2 minutes — user likely abandoned the phone prompt
+
+function Subscribe() {
+  const navigate = useNavigate();
+  const [phone, setPhone] = useState('');
+  const [credits, setCredits] = useState(null);
+  const [stage, setStage] = useState('form'); // form | pending | success | failed
+  const [error, setError] = useState('');
+  const pollRef = useRef(null);
+  const pollStartRef = useRef(null);
+
+  useEffect(() => {
+    getCredits().then((data) => { if (data.success) setCredits(data); }).catch(() => {});
+    return () => clearInterval(pollRef.current);
+  }, []);
+
+  const stopPolling = () => {
+    clearInterval(pollRef.current);
+    pollRef.current = null;
+  };
+
+  const pollStatus = (checkoutRequestId) => {
+    pollStartRef.current = Date.now();
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - pollStartRef.current > POLL_TIMEOUT_MS) {
+        stopPolling();
+        setStage('failed');
+        setError('We did not hear back in time. If the payment went through, your clicks will still be added shortly — check back in a minute.');
+        return;
+      }
+      try {
+        const data = await getPaymentStatus(checkoutRequestId);
+        if (data.status === 'success') {
+          stopPolling();
+          setStage('success');
+        } else if (data.status === 'failed' || data.status === 'cancelled') {
+          stopPolling();
+          setStage('failed');
+          setError('The payment was not completed. You can try again.');
+        }
+        // 'pending' — keep polling
+      } catch (err) {
+        // Transient network blip — keep polling, don't abort on one failed check.
+      }
+    }, POLL_INTERVAL_MS);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const trimmed = phone.trim();
+    if (!trimmed) {
+      setError('Please enter your M-Pesa phone number.');
+      return;
+    }
+    setStage('pending');
+    try {
+      const data = await initiatePayment(trimmed);
+      if (!data.success) {
+        setStage('failed');
+        setError(data.message || 'Could not start the payment.');
+        return;
+      }
+      pollStatus(data.checkout_request_id);
+    } catch (err) {
+      setStage('failed');
+      setError(err.response?.data?.message || 'Could not start the payment. Please try again.');
+    }
+  };
+
+  const handleRetry = () => {
+    setStage('form');
+    setError('');
+  };
+
+  const handleBackToChat = () => navigate('/');
+
+  return (
+    <div className="sub-root">
+      <div className="sub-card">
+        <FlirtyfyLogo size={32} textSize={22} />
+
+        {credits && (
+          <p className="sub-current-clicks">
+            You currently have <strong>{credits.available_clicks}</strong> click{credits.available_clicks === 1 ? '' : 's'}.
+          </p>
+        )}
+
+        {stage === 'form' && (
+          <>
+            <h2 className="sub-title">Top up your clicks</h2>
+            <p className="sub-price">
+              ${credits?.subscription_price_usd ?? 10} for {credits?.subscription_clicks ?? 200} clicks
+            </p>
+            <p className="sub-sub">Paid via M-Pesa</p>
+
+            <form onSubmit={handleSubmit} className="sub-form">
+              <label className="sub-label" htmlFor="sub-phone">M-Pesa phone number</label>
+              <input
+                id="sub-phone"
+                type="tel"
+                className="sub-input"
+                placeholder="07XX XXX XXX"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              {error && <p className="sub-error">{error}</p>}
+              <button type="submit" className="sub-pay-btn">
+                Pay with M-Pesa
+              </button>
+            </form>
+
+            <p className="sub-hint">
+              Prefer not to pay right now? Refer a friend instead — you both win.
+              Share your link from your account page for 30 free bonus clicks.
+            </p>
+          </>
+        )}
+
+        {stage === 'pending' && (
+          <div className="sub-status">
+            <div className="sub-spinner" />
+            <h2 className="sub-title">Check your phone</h2>
+            <p className="sub-sub">Enter your M-Pesa PIN to complete the payment.</p>
+          </div>
+        )}
+
+        {stage === 'success' && (
+          <div className="sub-status">
+            <div className="sub-check">✓</div>
+            <h2 className="sub-title">Payment received!</h2>
+            <p className="sub-sub">Your clicks have been added to your account.</p>
+            <button type="button" className="sub-pay-btn" onClick={handleBackToChat}>
+              Back to chat
+            </button>
+          </div>
+        )}
+
+        {stage === 'failed' && (
+          <div className="sub-status">
+            <h2 className="sub-title">Something went wrong</h2>
+            <p className="sub-error">{error}</p>
+            <button type="button" className="sub-pay-btn" onClick={handleRetry}>
+              Try again
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default Subscribe;

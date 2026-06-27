@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('accounts', '0002_userprofile_age_userprofile_age_verified_and_more'),
+        ('accounts', '0012_enable_pgvector_extension'),
     ]
 
     operations = [

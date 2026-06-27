@@ -1,284 +1,276 @@
-/* Dashboard Component Styling
- * 
- * Features:
- * - Navigation bar with logout
- * - Available features section only
- * - Modern dark purple theme
- * - Responsive design (mobile/tablet/desktop)
- */
+/* ── Dashboard — Message Stage ──────────────────────────────────────────── */
 
-/* ==================== GENERAL ==================== */
+*, *::before, *::after { box-sizing: border-box; }
 
-.dashboard-container {
+.db-root {
   min-height: 100vh;
-  background: linear-gradient(135deg, #09090f 0%, #11121c 100%);
+  width: 100%;
+  background: #0b080c;
   display: flex;
   flex-direction: column;
+  font-family: inherit;
 }
 
-/* ==================== NAVBAR ==================== */
+/* ── Navbar ──────────────────────────────────────────────────────────────── */
 
-.navbar {
-  background: rgba(15, 15, 24, 0.9);
-  backdrop-filter: blur(14px);
-  padding: 18px 32px;
+.db-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 22px 48px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
-  color: #e0d0f8;
-  gap: 20px;
 }
 
-.nav-left h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-.nav-center {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.nav-btn {
-  padding: 10px 16px;
-  background: rgba(124, 58, 237, 0.18);
-  color: #e0d0f8;
-  border: 1px solid rgba(124, 58, 237, 0.6);
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.nav-btn:hover {
-  background: rgba(124, 58, 237, 0.28);
-  transform: translateY(-1px);
-}
-
-.nav-btn.active {
-  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
-  border-color: transparent;
-  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
-}
-
-.nav-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.user-info-nav {
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.btn-logout {
-  padding: 10px 18px;
-  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  font-size: 14px;
-}
-
-.btn-logout:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 25px rgba(124, 58, 237, 0.35);
-}
-
-/* ==================== CONTENT AREA ==================== */
-
-.dashboard-content {
-  flex: 1;
-  padding: 50px 30px;
-  max-width: 1180px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-/* ==================== FEATURES SECTION ==================== */
-
-.features-section {
-  margin-bottom: 30px;
-}
-
-.features-section h3 {
-  color: #e0d0f8;
-  font-size: 34px;
-  margin: 0 0 28px 0;
+.db-logo {
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: 0.2px;
+  letter-spacing: -0.2px;
+  color: rgba(240, 236, 230, 0.55);
 }
 
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 28px;
+.db-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
 }
 
-.feature-card {
-  background: #111118;
-  border: 1px solid #222230;
-  border-radius: 24px;
-  padding: 32px;
-  box-shadow: 0 28px 60px rgba(124, 58, 237, 0.14);
+.db-welcome {
+  font-size: 13px;
+  color: rgba(240, 236, 230, 0.25);
+}
+
+.db-logout {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: rgba(240, 236, 230, 0.3);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.db-logout:hover {
+  color: rgba(240, 236, 230, 0.7);
+}
+
+/* ── Stage ───────────────────────────────────────────────────────────────── */
+
+.db-stage {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 32px 80px;
+  min-height: 100vh;
 }
 
-.feature-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 35px 80px rgba(124, 58, 237, 0.2);
+/* ── Label ───────────────────────────────────────────────────────────────── */
+
+.db-label {
+  margin: 0 0 32px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #c8824a;
+  opacity: 0.85;
 }
 
-.feature-icon {
-  font-size: 46px;
-  margin-bottom: 18px;
-  line-height: 1;
+/* ── Bubble ──────────────────────────────────────────────────────────────── */
+
+.db-bubble {
+  max-width: 680px;
+  width: 100%;
+  min-height: 120px;
+  padding: 40px 48px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  margin-bottom: 52px;
+  transition: opacity 0.5s ease;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
-.feature-card h4 {
-  margin: 0 0 14px 0;
-  color: #ffffff;
-  font-size: 24px;
-  font-weight: 800;
+.db-bubble--visible { opacity: 1; }
+.db-bubble--hidden  { opacity: 0; }
+
+.db-text {
+  font-size: clamp(20px, 2.8vw, 28px);
+  font-weight: 400;
+  line-height: 1.65;
+  color: #f0ece6;
+  letter-spacing: -0.1px;
 }
 
-.feature-card p {
-  color: #c9c1f5;
-  font-size: 16px;
-  line-height: 1.8;
-  margin: 0 0 28px 0;
-  flex: 1;
+/* ── Cursor ──────────────────────────────────────────────────────────────── */
+
+.db-cursor {
+  display: inline-block;
+  font-size: clamp(20px, 2.8vw, 28px);
+  line-height: 1.65;
+  color: #c8824a;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
 }
 
-.btn-feature {
-  padding: 14px 24px;
-  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
-  color: white;
+.db-cursor--on {
+  animation: blink 0.85s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── CTA ─────────────────────────────────────────────────────────────────── */
+
+.db-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 34px;
+  background: #f0ece6;
+  color: #0b080c;
   border: none;
-  border-radius: 14px;
-  font-size: 14px;
+  border-radius: 12px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  align-self: flex-start;
+  letter-spacing: 0.1px;
+  transition: background 0.2s ease, transform 0.15s ease;
 }
 
-.btn-feature:hover {
+.db-cta:hover {
+  background: #ffffff;
   transform: translateY(-2px);
-  box-shadow: 0 18px 36px rgba(124, 58, 237, 0.28);
 }
 
-/* ==================== RESPONSIVE DESIGN ==================== */
-
-/* Tablet */
-@media (max-width: 1024px) {
-  .features-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboard-content {
-    padding: 30px 20px;
-  }
-
-  .nav-center {
-    display: none;
-  }
+.db-cta:active {
+  transform: translateY(0);
 }
 
-/* Mobile */
+.db-arrow {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+
+/* ── Referral card ───────────────────────────────────────────────────────── */
+
+.db-referral-card {
+  margin-top: 44px;
+  padding: 22px 26px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  max-width: 420px;
+  text-align: left;
+}
+
+.db-referral-clicks {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #cfc8c2;
+}
+
+.db-referral-clicks strong {
+  color: #f0ece6;
+}
+
+.db-referral-title {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0ece6;
+}
+
+.db-referral-desc {
+  margin: 0 0 14px 0;
+  font-size: 12.5px;
+  color: #8a8480;
+  line-height: 1.5;
+}
+
+.db-referral-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.db-referral-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: #0b080c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #cfc8c2;
+  font-size: 12.5px;
+}
+
+.db-referral-copy {
+  padding: 10px 16px;
+  background: #f0ece6;
+  color: #0b080c;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.db-referral-copy:hover {
+  background: #ffffff;
+}
+
+.db-referral-topup {
+  display: block;
+  margin-top: 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #b8a8e8;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.db-referral-topup:hover {
+  color: #d8ccf8;
+}
+
+.db-cta:hover .db-arrow {
+  transform: translateX(4px);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
-  .navbar {
-    padding: 12px 15px;
-    flex-direction: column;
-    gap: 12px;
-    text-align: center;
+  .db-nav { padding: 18px 24px; }
+
+  .db-bubble {
+    padding: 28px 28px;
+    border-radius: 18px;
+    min-height: 90px;
   }
 
-  .nav-left h2 {
-    font-size: 20px;
-  }
-
-  .nav-center {
-    display: flex;
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .nav-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
-
-  .nav-right {
-    width: 100%;
-    justify-content: center;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .btn-logout {
-    width: 100%;
-  }
-
-  .dashboard-content {
-    padding: 20px;
-  }
-
-  .features-section h3 {
-    font-size: 24px;
-    margin-bottom: 22px;
-  }
-
-  .features-grid {
-    gap: 18px;
-  }
-
-  .feature-card {
-    padding: 24px;
-  }
-
-  .feature-icon {
-    font-size: 36px;
-  }
-
-  .feature-card h4 {
-    font-size: 20px;
-  }
-
-  .feature-card p {
-    font-size: 14px;
-  }
+  .db-welcome { display: none; }
 }
 
-/* Small Mobile */
 @media (max-width: 480px) {
-  .navbar {
-    padding: 12px 14px;
-  }
+  .db-nav { padding: 16px 18px; }
 
-  .nav-left h2 {
-    font-size: 18px;
-  }
+  .db-bubble { padding: 24px 22px; }
 
-  .feature-card {
-    padding: 18px;
-  }
-
-  .feature-icon {
-    font-size: 30px;
+  .db-cta {
+    padding: 13px 26px;
+    font-size: 14px;
   }
 }

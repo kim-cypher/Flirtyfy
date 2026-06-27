@@ -1,19 +1,17 @@
-import json
-from .novelty import normalize_text, fingerprint_text
+from datetime import timedelta
 
 
 def get_embedding(text):
     """
-    Get embedding for text using OpenAI API.
-    Returns a vector suitable for pgvector storage.
+    Generate an embedding vector for text using OpenAI text-embedding-3-small.
+    Used by the Celery background task for Layer 3 semantic dedup.
     """
     from accounts.openai_service import get_openai_client
-    
     try:
         client = get_openai_client()
         response = client.embeddings.create(
             input=text,
-            model='text-embedding-3-small'
+            model='text-embedding-3-small',
         )
         return response.data[0].embedding
     except Exception as e:
@@ -21,55 +19,33 @@ def get_embedding(text):
         return None
 
 
-def semantic_similar_replies(user, embedding, since, threshold=0.90):
+def semantic_similar_replies(user, embedding, since, threshold=0.88):
     """
-    Find semantically similar replies using embeddings with pgvector.
-    Uses L2 distance to find similar vectors.
-    VERY STRICT threshold (0.90 = 90% similar) to only allow truly diverse responses.
-    Lower = MORE strict about duplicates.
+    Find semantically similar past replies using pgvector cosine distance.
+    Called by tasks.generate_and_store_embedding (Layer 3, async) and by
+    dedup.dedupe_semantic (synchronous, real-time check).
+
+    threshold=0.88 means 88% similarity → flag as duplicate.
+    Lower value = stricter (fewer false negatives).
+
+    Uses CosineDistance, not L2Distance — the (1 - threshold) conversion
+    below is only mathematically valid for cosine distance (similarity =
+    1 - distance). L2/Euclidean distance has a different, magnitude-dependent
+    range, so applying this same formula to it would silently never match.
     """
     from accounts.novelty_models import AIReply
-    from django.db.models import F, FloatField
-    from pgvector.django import L2Distance
-    
+    from pgvector.django import CosineDistance
+
     if embedding is None:
         return AIReply.objects.none()
-    
-    # Find replies within threshold using L2 distance
-    similar_replies = AIReply.objects.filter(
-        user=user,
-        created_at__gte=since,
-        embedding__isnull=False
-    ).annotate(
-        distance=L2Distance('embedding', embedding)
-    ).filter(
-        distance__lt=(1 - threshold)  # L2 distance is inverse of similarity
-    ).order_by('distance')
-    
-    return similar_replies
 
-
-def lexical_similar_replies(user, normalized_text, since, threshold=0.90):
-    """
-    Find lexically similar replies using text similarity.
-    Compares normalized text fields.
-    VERY STRICT threshold (0.90 = 90% similar) to catch near-identical text.
-    Lower = MORE strict about duplicates.
-    """
-    from accounts.novelty_models import AIReply
-    from difflib import SequenceMatcher
-    
-    # Get all recent replies and compare in Python
-    recent_replies = AIReply.objects.filter(
-        user=user,
-        created_at__gte=since
+    return (
+        AIReply.objects.filter(
+            user=user,
+            created_at__gte=since,
+            embedding__isnull=False,
+        )
+        .annotate(distance=CosineDistance('embedding', embedding))
+        .filter(distance__lt=(1 - threshold))
+        .order_by('distance')
     )
-    
-    similar_ids = []
-    for reply in recent_replies:
-        if reply.normalized_text:
-            ratio = SequenceMatcher(None, normalized_text, reply.normalized_text).ratio()
-            if ratio >= threshold:
-                similar_ids.append(reply.id)
-    
-    return AIReply.objects.filter(id__in=similar_ids)

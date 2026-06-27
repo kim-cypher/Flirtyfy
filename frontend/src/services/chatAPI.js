@@ -1,43 +1,46 @@
 /**
- * Chat API Service - Button System Integration
- * Handles calls to the two new endpoints:
- * - POST /api/chat/generate-specific/ (LEFT side - context-aware)
- * - POST /api/chat/generate-button/ (RIGHT side - button scenarios)
+ * Chat API Service
+ * LEFT side:  generateSpecificResponse()
+ * RIGHT side: generateButtonResponse(), getAvailableButtons()
  */
 
 import apiClient from './apiClient';
 
+// 36 button IDs — must match BUTTON_INTENTS keys in button_generator.py
+const VALID_BUTTON_IDS = [
+  // Row 1 — Opening & Re-entry
+  'new_match', 'dead', 'you_went_silent', 'shower_fantasy', 'morning_flirt', 'after_work',
+  // Row 2 — Emotional Connection
+  'provider_energy', 'strategic_withdrawal', 'deep_emotion', 'lyrical_romance', 'vulnerability', 'family_talk',
+  // Row 3 — Daily Life
+  'lunch_break', 'dont_go', 'weekend_plans', 'wine_stars', 'work_talk', 'food_talk',
+  // Row 4 — Fantasy & Romance
+  'slow_dance', 'outdoor_fantasy', 'public_display', 'restaurant_fantasy', 'public_fantasy', 'kitchen_flirt',
+  // Row 5 — Personal & Deep
+  'his_exes', 'secrets', 'long_without', 'bdsm_talk', 'kinky_at_work',
+  // Row 6 — Sexual Escalation
+  'sensual_echo', 'bedroom_questions', 'positions', 'bedtime_fantasies', 'toy_play', 'fetishes',
+  // Row 7 — Personality & Connection
+  'daily_routine', 'hobbies_interests', 'childhood_memories', 'values_beliefs', 'humor_play', 'imagined_fantasy',
+  'sensory_storytelling', 'future_dreams', 'shared_interests', 'food_cooking', 'emotional_checkin',
+];
+
 /**
- * Generate context-aware response from pasted conversation (LEFT SIDE)
- * @param {string} conversation - Pasted conversation text (min 20, max 10000 chars)
- * @returns {Promise} Response with: success, response, intent (topic, tone, stage, energy)
+ * Generate context-aware reply from pasted conversation (LEFT SIDE)
+ * timeSlot: optional user-selected time override (e.g. 'evening').
  */
-export const generateSpecificResponse = async (conversation) => {
-  // Validate input
+export const generateSpecificResponse = async (conversation, timeSlot = null) => {
   const trimmed = conversation.trim();
-  
-  if (!trimmed) {
-    throw new Error('Please paste a conversation');
-  }
-  
-  if (trimmed.length < 20) {
-    throw new Error(`Conversation too short (${trimmed.length} chars, need at least 20)`);
-  }
-  
-  if (trimmed.length > 10000) {
-    throw new Error(`Conversation too long (${trimmed.length} chars, max 10000)`);
-  }
-  
+  if (!trimmed) throw new Error('Please paste a conversation');
+  if (trimmed.length < 20) throw new Error(`Conversation too short (${trimmed.length} chars, need at least 20)`);
+  if (trimmed.length > 10000) throw new Error(`Conversation too long (max 10000 characters)`);
+
+  const payload = { conversation };
+  if (timeSlot) payload.time_slot = timeSlot;
+
   try {
-    const response = await apiClient.post('/chat/generate-specific/', {
-      conversation: conversation,
-    });
-    
-    // Verify response structure
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to generate response');
-    }
-    
+    const response = await apiClient.post('/chat/generate-specific/', payload);
+    if (!response.data.success) throw new Error(response.data.message || 'Failed to generate response');
     return {
       success: true,
       response: response.data.response,
@@ -45,58 +48,27 @@ export const generateSpecificResponse = async (conversation) => {
       message: response.data.message,
     };
   } catch (error) {
-    // Handle API errors
-    if (error.response?.data?.message) {
-      throw new Error(error.response.data.message);
-    }
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Failed to generate response from conversation');
+    const err = new Error(error.response?.data?.message || error.message || 'Failed to generate response');
+    err.outOfClicks = error.response?.status === 402 && error.response?.data?.out_of_clicks === true;
+    throw err;
   }
 };
 
 /**
- * Generate button response from scenario (RIGHT SIDE)
- * @param {string} buttonIntent - Button intent name (e.g., 'morning_flirt', 'sensual')
- * @returns {Promise} Response with: success, response, theme
+ * Generate button scenario message (RIGHT SIDE)
+ * timeSlot: optional user-selected slot override (e.g. 'evening').
+ * Sent to backend so temporal context reflects the user's chosen time, not server time.
  */
-export const generateButtonResponse = async (buttonIntent) => {
-  // Validate input
-  if (!buttonIntent || !buttonIntent.trim()) {
-    throw new Error('Button intent is required');
-  }
-  
-  const validButtons = [
-    'dead',
-    'new_match',
-    'morning_flirt',
-    'deep_talk',
-    'dinner_talk',
-    'sensual',
-    'meeting_divert',
-    'insist',
-    'public_talks',
-    'bedroom_questions',
-    'positions',
-    'lyrical_romance',
-    'vulnerability'
-  ];
-  
-  if (!validButtons.includes(buttonIntent)) {
-    throw new Error(`Invalid button intent: ${buttonIntent}`);
-  }
-  
+export const generateButtonResponse = async (buttonIntent, timeSlot = null) => {
+  if (!buttonIntent) throw new Error('Button intent is required');
+  if (!VALID_BUTTON_IDS.includes(buttonIntent)) throw new Error(`Unknown button: ${buttonIntent}`);
+
+  const payload = { button_intent: buttonIntent };
+  if (timeSlot) payload.time_slot = timeSlot;
+
   try {
-    const response = await apiClient.post('/chat/generate-button/', {
-      button_intent: buttonIntent,
-    });
-    
-    // Verify response structure
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to generate response');
-    }
-    
+    const response = await apiClient.post('/chat/generate-button/', payload);
+    if (!response.data.success) throw new Error(response.data.message || 'Failed to generate response');
     return {
       success: true,
       response: response.data.response,
@@ -104,41 +76,79 @@ export const generateButtonResponse = async (buttonIntent) => {
       message: response.data.message,
     };
   } catch (error) {
-    // Handle API errors
-    if (error.response?.data?.message) {
-      throw new Error(error.response.data.message);
-    }
-    if (error.message) {
-      throw error;
-    }
-    throw new Error(`Failed to generate response for button: ${buttonIntent}`);
+    const err = new Error(error.response?.data?.message || error.message || `Failed to generate response for: ${buttonIntent}`);
+    err.outOfClicks = error.response?.status === 402 && error.response?.data?.out_of_clicks === true;
+    throw err;
   }
 };
 
 /**
- * Get list of all available button intents
- * @returns {Array} Array of button intent objects with name and description
+ * All 42 buttons in order (left→right, top→bottom).
+ * Row 7 buttons appear below a divider in RightPanel.
+ * emoji + shortLabel are used for the compact grid display.
+ * description is used as tooltip title.
  */
-export const getAvailableButtons = () => {
-  return [
-    { id: 'dead', label: 'Dead', description: 'Getting her interest back' },
-    { id: 'new_match', label: 'New Match', description: 'Just matched, starting' },
-    { id: 'morning_flirt', label: 'Morning Flirt', description: 'Morning message' },
-    { id: 'deep_talk', label: 'Deep Talk', description: 'Meaningful conversation' },
-    { id: 'dinner_talk', label: 'Dinner Talk', description: 'About going to dinner' },
-    { id: 'sensual', label: 'Sensual', description: 'Flirty & suggestive' },
-    { id: 'meeting_divert', label: 'Meeting Divert', description: 'Change plans to meet' },
-    { id: 'insist', label: 'Insist', description: 'Persistence on meeting' },
-    { id: 'public_talks', label: 'Public Talks', description: 'General social topics' },
-    { id: 'bedroom_questions', label: 'Bedroom Q', description: 'Sexual topics' },
-    { id: 'positions', label: 'Positions', description: 'Explicit scenarios' },
-    { id: 'lyrical_romance', label: 'Lyrical', description: 'Romantic & poetic' },
-    { id: 'vulnerability', label: 'Vulnerability', description: 'Emotional & open' },
-  ];
-};
+export const getAvailableButtons = () => [
+  // ── Row 1 — Opening & Re-entry ──────────────────────────────────────────
+  { id: 'new_match',            emoji: '✨', shortLabel: 'New Match',    row: 1, description: 'First message after matching' },
+  { id: 'dead',                 emoji: '💀', shortLabel: 'Dead Convo',   row: 1, description: 'He is cold — warm him back up without asking why' },
+  { id: 'you_went_silent',      emoji: '⏰', shortLabel: 'Went Silent',  row: 1, description: 'He disappeared — re-enter warm, no confrontation' },
+  { id: 'shower_fantasy',       emoji: '🚿', shortLabel: 'Shower',       row: 1, description: 'Alone or together — what the shower does to the mind' },
+  { id: 'morning_flirt',        emoji: '🌅', shortLabel: 'Morning',      row: 1, description: 'Slow, warm, sensual morning energy' },
+  { id: 'after_work',           emoji: '🛋️', shortLabel: 'After Work',   row: 1, description: 'Day is done — what do you reach for?' },
 
-export default {
-  generateSpecificResponse,
-  generateButtonResponse,
-  getAvailableButtons,
-};
+  // ── Row 2 — Emotional Connection ────────────────────────────────────────
+  { id: 'provider_energy',      emoji: '💰', shortLabel: 'Provider',     row: 2, description: 'Make him feel like a strong protector' },
+  { id: 'strategic_withdrawal', emoji: '🥺', shortLabel: 'Withdraw',     row: 2, description: 'Pull back so he chases harder' },
+  { id: 'deep_emotion',         emoji: '💔', shortLabel: 'Deep Feel',    row: 2, description: 'Vulnerable admission — real and raw' },
+  { id: 'lyrical_romance',      emoji: '🎵', shortLabel: 'Lyrical',      row: 2, description: 'Poetic, song-like intensity' },
+  { id: 'vulnerability',        emoji: '💭', shortLabel: 'Vulnerable',   row: 2, description: 'The part you usually keep armored' },
+  { id: 'family_talk',          emoji: '🏠', shortLabel: 'Family',       row: 2, description: 'How family shaped him — where he came from' },
+
+  // ── Row 3 — Daily Life & Lifestyle ──────────────────────────────────────
+  { id: 'lunch_break',          emoji: '🥗', shortLabel: 'Lunch',        row: 3, description: 'Midday — stolen time, who you think about' },
+  { id: 'dont_go',              emoji: '🙏', shortLabel: 'Don\'t Go',    row: 3, description: 'He is leaving — a soft confession that makes him stay' },
+  { id: 'weekend_plans',        emoji: '🏖️', shortLabel: 'Weekend',      row: 3, description: 'Nowhere to be — what does your body want?' },
+  { id: 'wine_stars',           emoji: '🍷', shortLabel: 'Wine & Stars', row: 3, description: 'Wine, open sky, who you want beside you' },
+  { id: 'work_talk',            emoji: '💼', shortLabel: 'Work Talk',    row: 3, description: 'What drives him — and what happens when work gets complicated' },
+  { id: 'food_talk',            emoji: '🍳', shortLabel: 'Food Talk',    row: 3, description: 'Real favorites, what he cooks, the food tied to a memory' },
+
+  // ── Row 4 — Fantasy & Romance ────────────────────────────────────────────
+  { id: 'slow_dance',           emoji: '💃', shortLabel: 'Foreplay',     row: 4, description: 'How long, how slow, what he skips and should not' },
+  { id: 'outdoor_fantasy',      emoji: '🌿', shortLabel: 'Outdoors',     row: 4, description: 'Outside, exposed, the risk of being seen — and wanting it' },
+  { id: 'public_display',       emoji: '💋', shortLabel: 'Public PDA',   row: 4, description: 'Being claimed where people can see' },
+  { id: 'restaurant_fantasy',   emoji: '🕯️', shortLabel: 'Restaurant',  row: 4, description: 'Restaurant vibes, best meals, and what happens under the table' },
+  { id: 'public_fantasy',       emoji: '🌃', shortLabel: 'Public',       row: 4, description: 'Walking in together — every head turning' },
+  { id: 'kitchen_flirt',        emoji: '👩‍🍳', shortLabel: 'Kitchen',     row: 4, description: 'Apron only, held from behind, counter — the kitchen earns it' },
+
+  // ── Row 5 — Personal & Deep ──────────────────────────────────────────────
+  { id: 'his_exes',             emoji: '👻', shortLabel: 'His Exes',     row: 5, description: 'What was good, what he learned, who she was — curious, not jealous' },
+  { id: 'secrets',              emoji: '🤫', shortLabel: 'Secrets',      row: 5, description: 'She shares one, then asks how he handles what he knows' },
+  { id: 'long_without',         emoji: '⏳', shortLabel: 'No Touch',     row: 5, description: 'The quality of wanting in someone who waited' },
+  { id: 'bdsm_talk',            emoji: '⛓️', shortLabel: 'BDSM',         row: 5, description: 'Power exchange, bondage, dominance, submission — which side he sits on' },
+  { id: 'kinky_at_work',        emoji: '🖥️', shortLabel: 'Kinky Work',   row: 5, description: 'Closed doors, office proximity, explicit desire' },
+
+  // ── Row 6 — Sexual Escalation ────────────────────────────────────────────
+  { id: 'sensual_echo',         emoji: '🔥', shortLabel: 'Sensual',      row: 6, description: 'Match his energy and go further' },
+  { id: 'bedroom_questions',    emoji: '🛏️', shortLabel: 'Bedroom',      row: 6, description: 'Confess, then ask what he wants — explicitly' },
+  { id: 'positions',            emoji: '😈', shortLabel: 'Positions',    row: 6, description: 'Go-to, what they reveal, what surprised her — and his' },
+  { id: 'bedtime_fantasies',    emoji: '🌜', shortLabel: 'Bedtime',      row: 6, description: 'Unguarded hour — what you think about in the dark' },
+  { id: 'toy_play',             emoji: '🎲', shortLabel: 'Toys',         row: 6, description: 'What you use, what you want him to use' },
+  { id: 'fetishes',             emoji: '🎭', shortLabel: 'Fetishes',     row: 6, description: 'The specific edge where your desire gets interesting' },
+
+  // ── Row 7 — Personality & Connection (below divider) ─────────────────────
+  { id: 'daily_routine',      emoji: '☀️', shortLabel: 'Daily Life',  row: 7, description: 'The unguarded texture of how he actually spends his days' },
+  { id: 'hobbies_interests',  emoji: '🎨', shortLabel: 'Hobbies',     row: 7, description: 'What absorbs him completely when no one he needs to impress is watching' },
+  { id: 'childhood_memories', emoji: '🧸', shortLabel: 'Childhood',   row: 7, description: 'The kid still in there — a specific moment before he managed his feelings' },
+  { id: 'values_beliefs',     emoji: '🧭', shortLabel: 'Values',      row: 7, description: 'What he stands by when it actually costs him something' },
+  { id: 'humor_play',         emoji: '😂', shortLabel: 'Humor',       row: 7, description: 'What kind of funny he is — the thing that breaks through without trying' },
+  { id: 'imagined_fantasy',   emoji: '✈️', shortLabel: 'Imagine',     row: 7, description: 'A sensory imagined scene — somewhere unreal, warm, vivid' },
+  { id: 'sensory_storytelling', emoji: '🌸', shortLabel: 'Sensory',     row: 7, description: 'A vivid sensory moment — scent, sound, taste, texture — that pulls him in' },
+  { id: 'future_dreams',        emoji: '🌠', shortLabel: 'Future',      row: 7, description: 'The dreams and plans that show what he is actually motivated by' },
+  { id: 'shared_interests',     emoji: '🎬', shortLabel: 'Shared Tastes', row: 7, description: 'Music, books, film — finding the real cultural overlap between you' },
+  { id: 'food_cooking',         emoji: '🍲', shortLabel: 'Food & Cook', row: 7, description: 'Taste and memory — what he cooks, craves, and grew up on' },
+  { id: 'emotional_checkin',    emoji: '💛', shortLabel: 'Check-In',    row: 7, description: 'A genuine check-in on how he is actually doing' },
+];
+
+const chatAPI = { generateSpecificResponse, generateButtonResponse, getAvailableButtons };
+export default chatAPI;

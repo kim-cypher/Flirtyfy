@@ -2,11 +2,9 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.core.exceptions import MultipleObjectsReturned
-from datetime import date, datetime
-import re
+from datetime import date
 
 from .models import UserProfile
-from .novelty_models import ConversationUpload, AIReply, AIReplyFeedback
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -14,10 +12,11 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     confirmPassword = serializers.CharField(write_only=True)
     date_of_birth = serializers.DateField()
+    referral_code = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password', 'confirmPassword', 'date_of_birth']
+        fields = ['email', 'username', 'password', 'confirmPassword', 'date_of_birth', 'referral_code']
 
     def validate(self, data):
         """Validate passwords match and user is 18+"""
@@ -51,6 +50,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         """Create user and associated profile"""
         date_of_birth = validated_data.pop('date_of_birth')
         validated_data.pop('confirmPassword')
+        referral_code = validated_data.pop('referral_code', '')
 
         with transaction.atomic():
             user = User.objects.create_user(**validated_data)
@@ -76,6 +76,12 @@ class RegisterSerializer(serializers.ModelSerializer):
                 profile.date_of_birth = date_of_birth
                 profile.age_verified = True
                 profile.save()
+
+            # Invalid/blank codes are silently ignored — referral is a bonus,
+            # never a reason to block signup.
+            if referral_code:
+                from .services.credits import apply_referral
+                apply_referral(user, referral_code)
 
         return user
 
@@ -123,56 +129,3 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name']
 
 
-class ConversationUploadSerializer(serializers.ModelSerializer):
-    """Serializer for conversation uploads with validation"""
-    def validate_original_text(self, value):
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        logger.info(f"Validating original_text: {value[:50]}... (len={len(value)})")
-        
-        # Enforce length limits
-        if not (10 <= len(value.strip()) <= 2000):
-            logger.warning(f"Length validation failed: {len(value)} chars (must be 10-2000)")
-            raise serializers.ValidationError("Conversation text must be between 10 and 2000 characters.")
-        
-        # Disallow dangerous characters (basic injection prevention)
-        if re.search(r'[<>\{\}\[\]\\]', value):
-            logger.warning(f"Dangerous characters detected in: {value[:50]}")
-            raise serializers.ValidationError("Invalid characters detected in conversation text.")
-        
-        # Basic profanity filter (expand as needed)
-        profanity = [
-            r'rape', r'suicide', r'sex with minors', r'sex with children',
-            r'violence', r'drugs', r'kill', r'murder'
-        ]
-        for word in profanity:
-            if re.search(word, value, re.IGNORECASE):
-                logger.warning(f"Profanity detected: {word}")
-                raise serializers.ValidationError("Inappropriate language detected. Please rephrase.")
-        
-        logger.info(f"Validation passed for text: {value[:50]}...")
-        return value
-
-    class Meta:
-        model = ConversationUpload
-        fields = ['id', 'original_text', 'created_at']
-
-
-class AIReplySerializer(serializers.ModelSerializer):
-    """Serializer for AI-generated replies"""
-    class Meta:
-        model = AIReply
-        fields = [
-            'id', 'original_text', 'normalized_text', 'fingerprint',
-            'summary', 'intent', 'created_at', 'expires_at', 'status', 'error'
-        ]
-        read_only_fields = ['fingerprint', 'normalized_text', 'summary', 'intent', 'created_at', 'status', 'error']
-
-
-class AIReplyFeedbackSerializer(serializers.ModelSerializer):
-    """Serializer for feedback on AI replies"""
-    class Meta:
-        model = AIReplyFeedback
-        fields = ['id', 'user', 'reply', 'reason', 'created_at']
-        read_only_fields = ['user', 'created_at']

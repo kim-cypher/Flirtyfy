@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
-from .models import UserProfile
+from .models import UserProfile, UserCredits, CreditGrant, Notification, Payment
 
 
 class UserProfileInline(admin.StackedInline):
@@ -18,3 +18,35 @@ class UserAdmin(admin.ModelAdmin):
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
 admin.site.register(UserProfile)
+
+
+class CreditGrantInline(admin.TabularInline):
+    model = CreditGrant
+    extra = 0
+    readonly_fields = ('amount', 'reason', 'expires_at', 'created_at')
+
+
+@admin.register(UserCredits)
+class UserCreditsAdmin(admin.ModelAdmin):
+    list_display = ('user', 'available_clicks', 'clicks_used', 'referral_code', 'referred_by', 'created_at')
+    search_fields = ('user__username', 'user__email', 'referral_code')
+    readonly_fields = ('clicks_used', 'referral_code', 'created_at')
+    inlines = [CreditGrantInline]
+
+    def available_clicks(self, obj):
+        return obj.available_clicks()
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('user', 'type', 'title', 'is_read', 'created_at')
+    list_filter = ('type', 'is_read')
+    search_fields = ('user__username', 'title')
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('user', 'amount_kes', 'clicks_granted', 'status', 'phone_number', 'mpesa_receipt_number', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('user__username', 'phone_number', 'checkout_request_id', 'mpesa_receipt_number')
+    readonly_fields = ('checkout_request_id', 'merchant_request_id', 'raw_callback', 'created_at', 'updated_at')

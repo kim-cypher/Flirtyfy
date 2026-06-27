@@ -1,67 +1,56 @@
-/**
- * ChatInterface Component
- * Main container with split-screen layout (50/50)
- * LEFT: Textarea input + Response output
- * RIGHT: 13 Buttons + Response output
- */
-
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
+import { useNavigate } from 'react-router-dom';
 import LeftPanel from './LeftPanel';
 import RightPanel from './RightPanel';
 import OutputArea from './OutputArea';
 import { generateSpecificResponse, generateButtonResponse } from '../services/chatAPI';
 import './ChatInterface.css';
 
-function ChatInterface({ user, token }) {
-  // LEFT SIDE state
+function ChatInterface({ user, token, timeSlot }) {
+  const navigate = useNavigate();
   const [leftResponse, setLeftResponse] = useState('');
-  const [leftIntent, setLeftIntent] = useState(null);
   const [leftLoading, setLeftLoading] = useState(false);
   const [leftError, setLeftError] = useState('');
 
-  // RIGHT SIDE state
   const [rightResponse, setRightResponse] = useState('');
-  const [rightTheme, setRightTheme] = useState('');
   const [rightLoading, setRightLoading] = useState(false);
   const [rightLoadingButton, setRightLoadingButton] = useState(null);
   const [rightError, setRightError] = useState('');
 
-  /**
-   * Handle LEFT SIDE generate
-   */
   const handleLeftGenerate = async (conversation) => {
     setLeftLoading(true);
     setLeftError('');
     setLeftResponse('');
-    setLeftIntent(null);
 
     try {
-      const result = await generateSpecificResponse(conversation);
+      const result = await generateSpecificResponse(conversation, timeSlot);
       setLeftResponse(result.response);
-      setLeftIntent(result.intent);
     } catch (error) {
+      if (error.outOfClicks) {
+        navigate('/subscribe');
+        return;
+      }
       setLeftError(error.message || 'Failed to generate response');
     } finally {
       setLeftLoading(false);
     }
   };
 
-  /**
-   * Handle RIGHT SIDE button click
-   */
   const handleRightButtonClick = async (buttonIntent) => {
     setRightLoading(true);
     setRightLoadingButton(buttonIntent);
     setRightError('');
     setRightResponse('');
-    setRightTheme('');
 
     try {
-      const result = await generateButtonResponse(buttonIntent);
+      const result = await generateButtonResponse(buttonIntent, timeSlot);
       setRightResponse(result.response);
-      setRightTheme(result.theme);
     } catch (error) {
+      if (error.outOfClicks) {
+        navigate('/subscribe');
+        return;
+      }
       setRightError(error.message || 'Failed to generate response');
     } finally {
       setRightLoading(false);
@@ -69,27 +58,8 @@ function ChatInterface({ user, token }) {
     }
   };
 
-  /**
-   * Retry LEFT SIDE
-   */
-  const handleLeftRetry = (conversation) => {
-    if (conversation.trim()) {
-      handleLeftGenerate(conversation);
-    }
-  };
-
-  /**
-   * Retry RIGHT SIDE
-   */
-  const handleRightRetry = (buttonIntent) => {
-    if (buttonIntent) {
-      handleRightButtonClick(buttonIntent);
-    }
-  };
-
   return (
     <div className="chat-interface">
-      {/* LEFT SIDE */}
       <div className="interface-side interface-left">
         <div className="side-content">
           <LeftPanel
@@ -100,7 +70,6 @@ function ChatInterface({ user, token }) {
           <div className="output-wrapper">
             <OutputArea
               response={leftResponse}
-              intent={leftIntent}
               loading={leftLoading}
               error={leftError}
             />
@@ -108,10 +77,8 @@ function ChatInterface({ user, token }) {
         </div>
       </div>
 
-      {/* DIVIDER */}
-      <div className="interface-divider"></div>
+      <div className="interface-divider" />
 
-      {/* RIGHT SIDE */}
       <div className="interface-side interface-right">
         <div className="side-content">
           <RightPanel
@@ -123,7 +90,6 @@ function ChatInterface({ user, token }) {
           <div className="output-wrapper">
             <OutputArea
               response={rightResponse}
-              theme={rightTheme}
               loading={rightLoading}
               error={rightError}
             />
@@ -141,11 +107,13 @@ ChatInterface.propTypes = {
     email: PropTypes.string,
   }),
   token: PropTypes.string,
+  timeSlot: PropTypes.string,
 };
 
 ChatInterface.defaultProps = {
   user: null,
   token: null,
+  timeSlot: null,
 };
 
 export default ChatInterface;

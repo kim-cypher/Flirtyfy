@@ -42,7 +42,7 @@ export const login = (email, password) => async (dispatch) => {
   }
 };
 
-export const register = (username, email, password, confirmPassword, dateOfBirth) => async (dispatch) => {
+export const register = (username, email, password, confirmPassword, dateOfBirth, referralCode = '') => async (dispatch) => {
   dispatch({ type: 'REGISTER_REQUEST' });
   try {
     const response = await apiClient.post('/register/', {
@@ -51,6 +51,7 @@ export const register = (username, email, password, confirmPassword, dateOfBirth
       password,
       confirmPassword,
       date_of_birth: dateOfBirth, // Convert camelCase to snake_case for backend
+      referral_code: referralCode,
     });
     const { token, user } = response.data;
     localStorage.setItem('access_token', token);

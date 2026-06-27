@@ -24,11 +24,20 @@ class SafetyFilter:
     
     # === CATEGORY 2: VIOLENCE/SELF-HARM (Threats, murder, suicide ideation) ===
     VIOLENCE_PATTERNS = [
-        r'\b(i[\'ll]?ll kill (you|myself|us)|kill yourself|kms|commit suicide)',
+        # Was `i[\'ll]?ll kill` — a malformed character class that only matched
+        # "i'll kill" by accident and missed "i will kill", "i'm going to kill",
+        # etc. entirely. Reuses the same intent-prefix construction as the
+        # punch/hit/harm pattern below, which is already correct.
+        r'\b(?:i(?:\'?ll\b|\s+will\b|\s+am\s+going\s+to\b|\s+want\s+to\b)|going\s+to|want\s+to)'
+        r'\s+kill\s+(?:you|myself|us)\b'
+        r'|\bkill\s+yourself\b|\bkms\b|\bcommit\s+suicide\b',
         r'\b(murder|assassination|execute|shoot|stab|poison)',
         r'\b(beat (you|me) (to death|up)|torture|rape)',
         r'\b(should (die|kill yourself|hurt yourself)|deserve to die)',
-        r'\b(harm|hurt|hit|punch|assault)\s+(you|me|us|yourself)',
+        # Require explicit intent verb — prevents "I do not do things that can hurt you" false positives
+        r'\b(?:i(?:\'?ll\b|\s+will\b|\s+am\s+going\s+to\b|\s+want\s+to\b)|going\s+to|want\s+to)\s+(?:punch|hit|assault|harm|hurt)\s+(?:you|me)\b',
+        r'\bhurt\s+yourself\b',
+        r'\bharm\s+yourself\b',
     ]
     
     # === CATEGORY 3: ILLEGAL DRUG/CONTROLLED SUBSTANCE PLANNING ===

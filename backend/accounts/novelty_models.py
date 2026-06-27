@@ -16,6 +16,10 @@ class AIReply(models.Model):
     normalized_text = models.TextField()
     embedding = VectorField(dimensions=1536, null=True, blank=True)  # OpenAI text-embedding-3-small
     fingerprint = models.CharField(max_length=128, db_index=True)
+    content_fingerprint = models.CharField(
+        max_length=128, db_index=True, null=True, blank=True,
+        help_text="SHA-256 of intent template key — detects same question in different words"
+    )
     summary = models.TextField()
     intent = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)

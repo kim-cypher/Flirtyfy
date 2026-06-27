@@ -1,117 +1,87 @@
-from celery import shared_task
-from django.utils import timezone
-from accounts.novelty_models import ConversationUpload, AIReply
-from accounts.services.ai_generation import generate_reply
-from accounts.services.similarity import get_embedding, semantic_similar_replies, lexical_similar_replies
-from accounts.services.novelty import normalize_text, fingerprint_text
-from accounts.services.utils import summarize_text, classify_intent
+import logging
 from datetime import timedelta
 
-@shared_task(bind=True, max_retries=3)
-def process_upload_task(self, upload_id):
+from celery import shared_task
+from django.utils import timezone
+
+from accounts.novelty_models import AIReply, ConversationUpload
+from accounts.services.similarity import get_embedding, semantic_similar_replies
+
+logger = logging.getLogger(__name__)
+
+
+@shared_task(bind=True, max_retries=2, ignore_result=True)
+def generate_and_store_embedding(self, reply_id: int):
     """
-    Process conversation upload and generate unique AI reply
-    
-    OPTIMIZATION (April 2026):
-    - Reduced from 5-attempt loop to 3-attempt fallback loop
-    - Generate 1 reply, check uniqueness, only retry if needed
-    - API call reduction: 5 calls → ~1.2 calls per upload (75% cost savings)
-    
-    VALIDATION FLOW:
-    1. generate_reply() validates response against ALL 7 rules:
-       - Rule 1: Character length (140-180)
-       - Rule 2: Must end with question mark
-       - Rule 3: No prohibited content
-       - Rule 4: Not robotic/formulaic
-       - Rule 5: Fingerprint unique
-       - Rule 6: Semantic unique (pgvector)
-       - Rule 7: Lexical unique (text similarity)
-    
-    2. This task checks uniqueness a FINAL TIME before creating database entry
-       to ensure response is still unique after generation delay
-    
-    3. Response is only saved to DB if ALL validations pass
+    Layer 3 semantic dedup — runs in background AFTER response is sent to user.
+    Zero latency impact. Cost: ~$4.50/month at 700 users × 300 messages/day.
+
+    Steps:
+    1. Fetch the saved AIReply.
+    2. Generate embedding via text-embedding-3-small.
+    3. Check pgvector cosine similarity against user's past 30-day replies.
+    4. If too similar (threshold 0.88) → mark status='similar' so future
+       generations skip it.
+    5. If unique → store embedding for future checks.
     """
-    upload = ConversationUpload.objects.get(id=upload_id)
-    user = upload.user
-    prompt = upload.original_text
-    summary = summarize_text(prompt)
-    intent = classify_intent(prompt)
-    since = timezone.now() - timedelta(days=45)
-    
-    # Generate ONE reply first, only retry if uniqueness fails
-    max_attempts = 3
-    candidate = None
-    norm = None
-    fp = None
-    emb = None
-    
-    for attempt in range(1, max_attempts + 1):
-        # generate_reply() ALREADY validates against ALL 7 rules internally
-        # with automatic rephrasing up to 3 times if validation fails
-        candidate = generate_reply(
-            prompt, 
-            user=user, 
-            context=f"Summarize: {summary}\nIntent: {intent}", 
-            attempt_number=attempt
-        )
-        
-        # CRITICAL: Response from generate_reply() already passed ALL validation rules
-        # But we re-check ONLY uniqueness here because:
-        # - If response doesn't meet length/question/prohibited/robotic rules → generate_reply returns error
-        # - We only store responses that passed generate_reply() validation
-        # - But we still check uniqueness in case user has since uploaded identical conversation
-        
-        norm = normalize_text(candidate)
-        fp = fingerprint_text(candidate)
-        emb = get_embedding(candidate)
-        
-        # ===== UNIQUENESS CHECK =====
-        # Rule 5: Fingerprint unique (no exact matches in last 45 days)
-        is_fingerprint_unique = not AIReply.objects.filter(
-            user=user, 
-            fingerprint=fp, 
-            created_at__gte=since
-        ).exists()
-        
-        # Rule 6: Semantic unique (pgvector similarity < 0.95)
-        is_semantic_unique = not semantic_similar_replies(user, emb, since).exists()
-        
-        # Rule 7: Lexical unique (text overlap < 0.95)
-        is_lexical_unique = not lexical_similar_replies(user, norm, since).exists()
-        
-        # If all uniqueness checks pass, save and return immediately
-        if is_fingerprint_unique and is_semantic_unique and is_lexical_unique:
-            break  # Exit loop, candidate is ready to save
-        
-        # On final attempt, exit loop and save with fallback status
-        # (don't retry further)
-    
-    # ===== SAVE RESPONSE (either 'complete' or 'fallback' status) =====
-    AIReply.objects.filter(
-        user=user, 
-        created_at__lt=timezone.now() - timedelta(days=45)
-    ).delete()
-    
-    # Determine status: 'complete' if unique, 'fallback' if all attempts exhausted
-    is_unique = (
-        not AIReply.objects.filter(user=user, fingerprint=fp, created_at__gte=since).exists() and
-        not semantic_similar_replies(user, emb, since).exists() and
-        not lexical_similar_replies(user, norm, since).exists()
+    try:
+        reply = AIReply.objects.get(id=reply_id)
+    except AIReply.DoesNotExist:
+        logger.warning(f"generate_and_store_embedding: reply {reply_id} not found")
+        return
+
+    if reply.embedding is not None:
+        return
+
+    text = reply.original_text if reply.intent_type == 'specific' else reply.normalized_text
+    if not text or len(text.strip()) < 5:
+        return
+
+    try:
+        embedding = get_embedding(text)
+    except Exception as e:
+        logger.error(f"Embedding generation failed for reply {reply_id}: {e}")
+        try:
+            self.retry(countdown=30)
+        except self.MaxRetriesExceededError:
+            pass
+        return
+
+    if embedding is None:
+        return
+
+    since = timezone.now() - timedelta(days=30)
+    similar = semantic_similar_replies(reply.user, embedding, since, threshold=0.88)
+    similar = similar.exclude(id=reply_id)
+
+    if similar.exists():
+        AIReply.objects.filter(id=reply_id).update(embedding=embedding, status='similar')
+        logger.info(f"Reply {reply_id} marked similar (Layer 3) — user {reply.user_id}")
+    else:
+        AIReply.objects.filter(id=reply_id).update(embedding=embedding)
+        logger.debug(f"Reply {reply_id} embedding stored, semantically unique")
+
+
+@shared_task(ignore_result=True)
+def cleanup_expired_replies():
+    """
+    Daily Celery Beat task — enforces the 30-day retention that
+    AIReply.expires_at implies but nothing was actually deleting on.
+
+    Deletes ConversationUpload rows older than 30 days first — its FK from
+    AIReply is on_delete=CASCADE, so this also removes their child AIReply
+    rows in the same step. Then sweeps any AIReply whose own expires_at has
+    already passed, covering rows that could otherwise outlive their upload
+    (defensive — in normal operation the two are created together).
+    """
+    now = timezone.now()
+    cutoff = now - timedelta(days=30)
+
+    deleted_uploads, _ = ConversationUpload.objects.filter(created_at__lt=cutoff).delete()
+    deleted_replies, _ = AIReply.objects.filter(expires_at__lt=now).delete()
+
+    logger.info(
+        f"Cleanup: removed {deleted_uploads} expired ConversationUpload rows "
+        f"(cascaded AIReply included) + {deleted_replies} additional expired AIReply rows"
     )
-    status = 'complete' if is_unique else 'fallback'
-    
-    reply = AIReply.objects.create(
-        user=user,
-        upload=upload,
-        original_text=candidate,
-        normalized_text=norm,
-        embedding=emb,
-        fingerprint=fp,
-        summary=summary,
-        intent=intent,
-        created_at=timezone.now(),
-        expires_at=timezone.now() + timedelta(days=45),
-        status=status  # ✅ 'complete' if unique, ⚠️ 'fallback' if not
-    )
-    return reply.id
+    return {'uploads_deleted': deleted_uploads, 'replies_deleted': deleted_replies}
