@@ -1,0 +1,101 @@
+# Production compose file — same project, different posture than docker-compose.yml:
+#   - backend/frontend bound to 127.0.0.1:<port> only (host nginx is the only
+#     thing the public internet talks to; never bind 0.0.0.0 here)
+#   - db/redis NOT published to the host at all — other containers reach them
+#     by service name on this compose project's own docker network
+#   - frontend is the production nginx-served static build (Dockerfile.prod),
+#     not the CRA dev server
+#
+# BACKEND_PORT / FRONTEND_PORT must be set in this project's .env to whatever
+# `ss -tlnp` shows free on the VPS — do not guess; check first.
+#
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-flirty}
+      POSTGRES_USER: ${POSTGRES_USER:-flirty}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flirty}"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn flirty_backend.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BACKEND_PORT}:8000"
+    restart: unless-stopped
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A flirty_backend.celery:app worker --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A flirty_backend.celery:app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: flirty_backend.settings
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

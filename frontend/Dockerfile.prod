@@ -1,0 +1,16 @@
+# Production build — multi-stage. Stage 1 builds the static React bundle,
+# stage 2 serves it via nginx:alpine. Bind this container to 127.0.0.1:<port>
+# in docker-compose.prod.yml — the HOST nginx (with the real TLS cert) is what
+# the public internet talks to; this container's nginx only serves static
+# files and falls back to index.html for React Router's client-side routes.
+FROM node:18 AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

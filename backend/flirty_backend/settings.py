@@ -47,7 +47,7 @@ DEBUG = env.bool("DEBUG", default=True)
 # SECURITY WARNING: keep the secret key used in production secret!
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 
 # Application definition
@@ -68,6 +68,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -145,24 +146,51 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
+# DEBUG=False stops Django's runserver from serving static files itself —
+# WhiteNoise serves them directly from gunicorn instead, so nginx doesn't
+# need its own config/volume for Django admin's CSS/JS. Requires running
+# `python manage.py collectstatic --noinput` once during deploy.
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = [
+# Production sets CORS_ALLOWED_ORIGINS=https://flirtfyai.site,https://www.flirtfyai.site
+# in its own .env — these dev defaults stay untouched either way.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://frontend:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-]
+])
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = ['*']
+
+# Production-only hardening — gated on DEBUG so local dev (plain HTTP) is
+# never affected. nginx terminates TLS and proxies plain HTTP to gunicorn,
+# so Django needs SECURE_PROXY_SSL_HEADER to trust nginx's X-Forwarded-Proto
+# header — without it, SECURE_SSL_REDIRECT would redirect-loop forever
+# (Django would see every proxied request as HTTP and keep "redirecting" to HTTPS).
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    # Production .env: CSRF_TRUSTED_ORIGINS=https://flirtfyai.site,https://www.flirtfyai.site
+    CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # Allow framing for development (set to SAMEORIGIN or DENY in production)
 X_FRAME_OPTIONS = 'SAMEORIGIN'
