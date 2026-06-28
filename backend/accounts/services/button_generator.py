@@ -58,13 +58,21 @@ _SYSTEM = (
     "PROHIBITED — NEVER DO ANY OF THESE:\n"
     "• Never use the word 'actually' — it appears in AI text constantly and reads as robotic. Cut it everywhere.\n"
     "• Never use 'genuinely' as a filler intensifier.\n"
-    "• Never ask 'What kind of man are you when...' — overused formula.\n"
+    "• Never ask 'What kind of man/woman/person are you when...' or '...were you before you became careful' — overused formulas.\n"
     "• Never ask 'What did it feel like the first time a woman...' — overused formula.\n"
-    "• Never open a sentence with 'I keep' + a verb ending in -ing ('I keep replaying', 'I keep catching myself', "
+    "• Never say 'I have been replaying' or open a sentence with 'I keep' + a verb ending in -ing ('I keep replaying', 'I keep catching myself', "
     "'I keep coming back') — it is the single most overused frame for ongoing thought. Use a different construction "
     "every time: name the thought directly, use a different verb tense, or describe the effect instead of the loop.\n"
+    "• Never open with 'I'm here ' + any verb ending in -ing ('I'm here thinking', 'I'm here wondering', 'I'm sitting here "
+    "replaying', 'I've been sitting here noticing') — it is a stage direction announcing a thought instead of just having it. "
+    "Start directly from the thought, feeling, or detail itself.\n"
     "• When describing a physical reaction, do not default to 'chest' every time. Rotate across real options: "
     "throat, stomach, spine, hands, skin, breath, legs. Pick whichever fits the moment, not the same one by habit.\n"
+    "• Do not literally name the setting or theme word the scenario is built around (e.g. 'kitchen', 'shower', 'wine') "
+    "in most of your replies — let it show through what is happening and what she notices, not by repeating its label. "
+    "Name it directly only occasionally, never as a reflex.\n"
+    "• Never use the word 'profile' or 'bio' to refer to him — respond to what he actually said or did, never to an "
+    "abstract dating-profile object.\n"
     "• Never use em-dashes (—).\n"
     "• Never end with a noun phrase + '?' like 'The weight of it?' — that is not a question.\n"
     "• The speaker is a WOMAN. Never use male arousal language for her body (hard, half-hard, erection, getting hard).\n\n"
@@ -135,6 +143,177 @@ _OPENER_STYLES = [
         ),
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Life-slice content domains — ROW 7 ("getting to know him") buttons only.
+#
+# Opener style (above) controls HOW she opens a sentence; this controls WHAT
+# she is actually talking about. Without it, "share something real about
+# yourself first" has no concrete subject to anchor to, so the model falls
+# back on the same handful of abstract introspection templates regardless of
+# opener-style rotation ("I keep replaying...", "...before you became
+# careful"). Python rotates the DOMAIN, the LLM still invents every word —
+# same mechanism as _OPENER_STYLES, just one more axis.
+#
+# Scoped to row 7 only: rows 1-6 already give each button a specific, tuned
+# physical/emotional scenario (shower, bedroom, deep_emotion, etc.) — forcing
+# a generic domain like "media in progress" on top of those would conflict
+# with content that's already concrete. Row 7 buttons are the ones whose own
+# prompt text says "she shares something real about her life first" with no
+# fixed subject, which is exactly the gap this fills.
+# ---------------------------------------------------------------------------
+
+_LIFE_SLICES = [
+    {
+        'name': 'media in progress',
+        'instruction': (
+            "Ground it in something she is currently watching, reading, or listening to on repeat — "
+            "a show she has not finished, a song stuck in her head, a book she cannot put down. "
+            "Name the kind of thing specifically, never a real title, just real specific detail."
+        ),
+    },
+    {
+        'name': 'small friction',
+        'instruction': (
+            "Ground it in a small, ordinary unfinished task or annoyance from her actual day — "
+            "a half-done chore, a dying plant, a typo she sent, a slow line, a lost sock. "
+            "Mundane and real, not dramatic."
+        ),
+    },
+    {
+        'name': 'home sensory detail',
+        'instruction': (
+            "Ground it in one physical detail of where she is right now — the light in the room, "
+            "what she is wearing, a candle, the sound around her, the warmth of a blanket. "
+            "One concrete sensory detail, not a feeling described abstractly."
+        ),
+    },
+    {
+        'name': 'food or body',
+        'instruction': (
+            "Ground it in something about food, drink, or her body right now — what she is craving, "
+            "coffee gone cold, being too full or hungry, a stretch she just did. "
+            "Concrete and physical, not metaphorical."
+        ),
+    },
+    {
+        'name': 'social ripple',
+        'instruction': (
+            "Ground it in a small recent social moment — a friend's text, something in a group chat, "
+            "a comment from a coworker, a stranger's interaction. Something that actually just "
+            "happened, told briefly."
+        ),
+    },
+    {
+        'name': 'small win or fail',
+        'instruction': (
+            "Ground it in something small she did or did not get done today — finished a task, "
+            "procrastinated something, made a small decision she is proud or amused by. "
+            "Ordinary-life scale, not a major life event."
+        ),
+    },
+    {
+        'name': 'weather or season',
+        'instruction': (
+            "Ground it in the weather or season right now — rain, the first cold day, sun through "
+            "a window, humidity. One specific physical detail of the day itself."
+        ),
+    },
+    {
+        'name': 'memory trigger',
+        'instruction': (
+            "Ground it in something small that just pulled up a memory — a smell, a song that came on, "
+            "an object she saw. Name the trigger briefly, then what it does to her, no full story."
+        ),
+    },
+    {
+        'name': 'anticipation',
+        'instruction': (
+            "Ground it in something specific she is looking forward to in the next few days — "
+            "small and real, like a meal, a show coming back, a free afternoon. Not vague excitement."
+        ),
+    },
+    {
+        'name': 'body state now',
+        'instruction': (
+            "Ground it in her exact physical state in this moment — tired, restless, warm, sore, "
+            "comfortable. Name the specific physical sensation, not an emotion word standing in for it."
+        ),
+    },
+]
+
+_LIFE_SLICE_NAMES = frozenset(s['name'] for s in _LIFE_SLICES)
+
+
+def _select_life_slice(button_intent: str, session_data: dict) -> dict:
+    """Per-button rotation across the 10 life-slice domains, no consecutive repeats."""
+    key = f'life_slice_{button_intent}'
+    remaining = [n for n in session_data.get(key, []) if n in _LIFE_SLICE_NAMES]
+
+    if not remaining:
+        remaining = list(_LIFE_SLICE_NAMES)
+        random.shuffle(remaining)
+
+    chosen_name = remaining.pop(0)
+    session_data[key] = remaining
+    return next(s for s in _LIFE_SLICES if s['name'] == chosen_name)
+
+
+# ---------------------------------------------------------------------------
+# New-match "notice angles" — new_match is the most-clicked button. Its
+# prompt asks her to confess "something about how he replied that opened
+# something in her" with no fixed subject, which is the exact same blank-
+# canvas gap _LIFE_SLICES fixes for row 7 — just scoped to "what she noticed
+# in his reply" instead of "what's happening in her own life". Same
+# Python-rotates-the-category, LLM-invents-the-words mechanism.
+# ---------------------------------------------------------------------------
+
+_NEW_MATCH_ANGLES = [
+    {
+        'name': 'his wording',
+        'instruction': "Ground it in one specific word or phrase he chose — what that exact choice told her.",
+    },
+    {
+        'name': 'his timing',
+        'instruction': "Ground it in how he replied — fast, slow, thoughtful — and what that pace did to her.",
+    },
+    {
+        'name': 'his curiosity',
+        'instruction': "Ground it in a question he asked or specific interest he showed in her.",
+    },
+    {
+        'name': 'his confidence',
+        'instruction': "Ground it in how he carried himself in the message — sure of himself without trying.",
+    },
+    {
+        'name': 'his humor',
+        'instruction': "Ground it in something that actually made her smile or laugh, specifically.",
+    },
+    {
+        'name': 'his attentiveness',
+        'instruction': "Ground it in one specific detail he picked up on from what she said first.",
+    },
+    {
+        'name': 'his directness',
+        'instruction': "Ground it in how plainly or simply he said something, no games.",
+    },
+]
+_NEW_MATCH_ANGLE_NAMES = frozenset(a['name'] for a in _NEW_MATCH_ANGLES)
+
+
+def _select_new_match_angle(session_data: dict) -> dict:
+    """Rotation across the 7 notice-angles, no consecutive repeats."""
+    key = 'new_match_angle'
+    remaining = [n for n in session_data.get(key, []) if n in _NEW_MATCH_ANGLE_NAMES]
+
+    if not remaining:
+        remaining = list(_NEW_MATCH_ANGLE_NAMES)
+        random.shuffle(remaining)
+
+    chosen_name = remaining.pop(0)
+    session_data[key] = remaining
+    return next(a for a in _NEW_MATCH_ANGLES if a['name'] == chosen_name)
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +474,7 @@ BUTTON_INTENTS = {
 
     # ── ROW 2 — Emotional Connection ────────────────────────────────────────
     'provider_energy': {
-        'name': '💰 Provider',
+        'name': '🛡️ Quiet Strength',
         'row': 2,
         'prompt': (
             "He carries the energy of a man who handles things without performing it — quiet strength, no theater. "
@@ -305,7 +484,7 @@ BUTTON_INTENTS = {
         ),
     },
     'strategic_withdrawal': {
-        'name': '🥺 Withdraw',
+        'name': '🍃 Need Space',
         'row': 2,
         'prompt': (
             "She is full right now — more happening inside her than she can give. "
@@ -325,7 +504,7 @@ BUTTON_INTENTS = {
         ),
     },
     'lyrical_romance': {
-        'name': '🎵 Lyrical',
+        'name': '💌 Sweet Words',
         'row': 2,
         'prompt': (
             "One specific image or detail she keeps returning to — the precise thing about him "
@@ -378,16 +557,6 @@ BUTTON_INTENTS = {
             "Her question is the kind that makes him realize he is not quite ready to leave."
         ),
     },
-    'weekend_plans': {
-        'name': '🏖️ Weekend',
-        'row': 3,
-        'prompt': (
-            "Two free days — no performance required. "
-            "She confesses how she moves through unstructured time: what her body reaches for, "
-            "how her wanting operates when there is nothing to do but be exactly herself. "
-            "Her question makes him feel invited into something warm and already in motion."
-        ),
-    },
     'wine_stars': {
         'name': '🍷 Wine & Stars',
         'row': 3,
@@ -407,16 +576,6 @@ BUTTON_INTENTS = {
             "She shares something brief and honest about what she thinks work reveals about who a person really is. "
             "Her question is not about his job title but about his real relationship to what he does — "
             "the part that would never make the interview version."
-        ),
-    },
-    'food_talk': {
-        'name': '🍳 Food Talk',
-        'row': 3,
-        'prompt': (
-            "Real food preferences strip the polite version away — what someone eats alone tells you something true. "
-            "She shares something specific about food she loves without self-consciousness: the honest one, "
-            "not the restaurant-safe answer. "
-            "Her question makes him comfortable giving her his real answer — the one he does not usually say out loud."
         ),
     },
 
@@ -463,16 +622,6 @@ BUTTON_INTENTS = {
             "Her question finds out what he thinks about in that specific electricity."
         ),
     },
-    'public_fantasy': {
-        'name': '🌃 Public',
-        'row': 4,
-        'prompt': (
-            "Walking into a room with him — eyes adjusting, the quiet charge of being visibly together. "
-            "She confesses what being openly, publicly chosen does to her nervous system: "
-            "the precise effect of that specific visibility. "
-            "Her question finds out if he feels any version of what that does on his side."
-        ),
-    },
     'kitchen_flirt': {
         'name': '👩‍🍳 Kitchen',
         'row': 4,
@@ -500,10 +649,11 @@ BUTTON_INTENTS = {
         'name': '🤫 Secrets',
         'row': 5,
         'prompt': (
-            "She trusts him with something she does not show most people — "
-            "a real private piece of herself, said plainly and without apology. "
-            "She makes him feel like he was specifically chosen to receive this. "
-            "Her question finds out what he does with the weight of being trusted like that."
+            "Earlier she told him she has secrets, and he asked her to share one — she follows through now. "
+            "She gives him one specific NAUGHTY secret: sexual or deliciously private, the kind she does not say "
+            "to most people, told plainly and without apology. Not vague vulnerability — a real, specific "
+            "confession with an edge to it. "
+            "Her question finds out what he does with the weight of being trusted with something this honest."
         ),
     },
     'long_without': {
@@ -578,24 +728,6 @@ BUTTON_INTENTS = {
             "Tone: genuinely curious, warm, lit up by the question."
         ),
     },
-    'childhood_memories': {
-        'name': '🧸 Childhood',
-        'row': 7,
-        'prompt': (
-            "She believes the kid someone was is still in there and she wants to find him. "
-            "She shares something small and specific from her own past first — "
-            "a memory, a feeling, a fragment that still lands when she reaches for it. "
-            "Her question pulls him back to a real specific moment with one of these angles: "
-            "favorite childhood memory / where he grew up and what it felt like / "
-            "a beloved toy, book, or game / who he was closest to growing up / "
-            "a funny or sweet thing that happened to him as a kid / "
-            "a family tradition he remembers fondly / "
-            "what he was like as a child before he learned to manage what he felt. "
-            "The question must be specific enough that he has to actually remember, not just describe. "
-            "She shows she values his past and the person it made him. "
-            "Tone: warm, nostalgic, tender, genuinely interested."
-        ),
-    },
     'values_beliefs': {
         'name': '🧭 Values',
         'row': 7,
@@ -613,26 +745,8 @@ BUTTON_INTENTS = {
             "Tone: honest, direct, thoughtful. She lets him feel trusted with something real."
         ),
     },
-    'humor_play': {
-        'name': '😂 Humor',
-        'row': 7,
-        'prompt': (
-            "She wants to know what kind of funny he is — not his best material, "
-            "the humor that comes out sideways when he is not performing. "
-            "She shares something ridiculous about what gets her without softening it: "
-            "a joke type she loves, something she finds funny that others don't, a goofy habit. "
-            "Her question invites his playful side with one of these angles: "
-            "funniest thing that happened to him this week / a joke he can tell and she will rate out of ten / "
-            "two truths and a lie / the most ridiculous superpower he would choose / "
-            "goofiest thing he did as a teenager / "
-            "how he would describe himself using only emoji / "
-            "something he finds funny that no one else seems to. "
-            "The question must be light enough to make him smile before he even answers. "
-            "Tone: playful, warm, fun — the kind of message that makes him laugh first."
-        ),
-    },
     'imagined_fantasy': {
-        'name': '✈️ Imagine',
+        'name': '🌌 Sensory Imagination',
         'row': 7,
         'prompt': (
             "She lets herself live inside a specific imagined scene — not plans, not logistics, "
@@ -735,17 +849,6 @@ BUTTON_INTENTS = {
     },
 
     # ── ROW 6 — Sexual Escalation ────────────────────────────────────────────
-    'sensual_echo': {
-        'name': '🔥 Sensual',
-        'row': 6,
-        'prompt': (
-            "His wanting is present and she feels it everywhere — in the specific way it changes "
-            "what she is willing to say. "
-            "She confesses the precise physical response his desire creates in her right now: "
-            "not the abstract effect but the exact thing happening in her body. "
-            "Her question turns his wanting back on him — further than where he started."
-        ),
-    },
     'bedroom_questions': {
         'name': '🛏️ Bedroom',
         'row': 6,
@@ -962,14 +1065,10 @@ _BUTTON_Q_CATS: dict = {
                           'confession_landing', 'his_preference', 'his_body_now'],
     'dont_go':           ['confession_landing', 'his_instinct', 'his_body_now',
                           'the_dynamic', 'his_character', 'his_habit'],
-    'weekend_plans':     ['his_habit', 'his_preference', 'what_hed_ask_her',
-                          'his_instinct', 'his_body_now'],
     'wine_stars':        ['his_memory', 'his_past_experience', 'his_preference',
                           'confession_landing', 'his_instinct', 'what_hed_ask_her'],
     'work_talk':         ['his_habit', 'his_opinion', 'his_character',
                           'his_memory', 'his_preference', 'confession_landing'],
-    'food_talk':         ['his_preference', 'his_habit', 'his_opinion',
-                          'his_past_experience', 'his_instinct'],
 
     # ROW 4 — Fantasy & Romance
     'slow_dance':        ['his_habit', 'his_instinct', 'what_hed_ask_her',
@@ -980,8 +1079,6 @@ _BUTTON_Q_CATS: dict = {
                           'what_hed_ask_her', 'confession_landing', 'his_body_now'],
     'restaurant_fantasy': ['his_memory', 'his_past_experience', 'his_instinct',
                            'confession_landing', 'what_hed_ask_her', 'his_body_now'],
-    'public_fantasy':    ['his_instinct', 'his_body_now', 'his_habit',
-                          'confession_landing', 'his_preference', 'the_dynamic'],
     'kitchen_flirt':     ['his_instinct', 'his_habit', 'what_hed_ask_her',
                           'his_body_now', 'his_preference', 'confession_landing'],
 
@@ -1002,12 +1099,8 @@ _BUTTON_Q_CATS: dict = {
                            'confession_landing', 'his_past_experience'],
     'hobbies_interests':  ['his_habit', 'his_memory', 'his_preference', 'his_past_experience',
                            'confession_landing', 'his_character'],
-    'childhood_memories': ['his_memory', 'his_past_experience', 'his_character',
-                           'confession_landing', 'his_habit'],
     'values_beliefs':     ['his_character', 'his_opinion', 'his_habit',
                            'confession_landing', 'his_preference'],
-    'humor_play':         ['his_habit', 'his_character', 'his_preference',
-                           'confession_landing', 'his_past_experience', 'the_dynamic'],
     'imagined_fantasy':   ['his_preference', 'his_habit', 'confession_landing',
                            'the_dynamic', 'his_character', 'his_memory'],
     'sensory_storytelling': ['his_memory', 'his_past_experience', 'his_preference',
@@ -1022,8 +1115,6 @@ _BUTTON_Q_CATS: dict = {
                              'his_opinion', 'his_memory'],
 
     # ROW 6 — Sexual Escalation
-    'sensual_echo':      ['his_body_now', 'his_instinct', 'what_hed_ask_her',
-                          'confession_landing', 'his_preference', 'the_dynamic'],
     'bedroom_questions': ['what_hed_ask_her', 'his_instinct', 'his_body_now',
                           'his_preference', 'his_habit', 'confession_landing'],
     'positions':         ['his_preference', 'his_habit', 'his_instinct',
@@ -1242,6 +1333,26 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     intent_config = BUTTON_INTENTS[button_intent]
     user_prompt = intent_config['prompt']
 
+    # Row 7 ("getting to know him") buttons ask her to share something real
+    # about her own life first, with no fixed subject — see _LIFE_SLICES above
+    # for why this is scoped to row 7 only.
+    if intent_config['row'] == 7:
+        life_slice = _select_life_slice(button_intent, session_data)
+        user_prompt += (
+            f'\n\nWhat she shares must be grounded in this concrete territory: '
+            f'{life_slice["name"].upper()} — {life_slice["instruction"]} '
+            f'Invent your own specific real detail in this territory — never reuse a phrase from a previous message.'
+        )
+
+    if button_intent == 'new_match':
+        angle = _select_new_match_angle(session_data)
+        user_prompt += (
+            f'\n\nWhat she noticed must be grounded in this specific angle: '
+            f'{angle["name"].upper()} — {angle["instruction"]} '
+            f'Invent your own specific detail in this angle — never reuse a phrase from a previous message. '
+            f'Never use the word "profile" or "bio" — respond to what he actually said, not an abstract profile.'
+        )
+
     if used_themes:
         user_prompt += (
             f"\n\nThemes already used — DO NOT repeat any of these: {', '.join(used_themes)}. "
@@ -1321,6 +1432,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 or _has_physical_reality_intrusion(t)
                 or _has_male_anatomy_language(t)
                 or _has_formula_phrase(t)
+                or _has_temporal_leak(t)
             )
 
         if _result_is_bad(result):
@@ -1372,7 +1484,12 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 )
                 parts = re.split(r'(?<=[.!?])\s+', better.rstrip('?').rstrip())
                 s1 = parts[0].rstrip('.!,') if parts else better.rstrip('?.!,')
-                if _is_refusal(s1) or len(s1.split()) < 4:
+                # This rescue path only regenerates the QUESTION below — s1 ships
+                # verbatim from whichever attempt failed validation. Without this
+                # check, a formula-phrase sentence 1 (e.g. "I keep replaying...")
+                # that triggered the retry in the first place would still ship,
+                # just with a fresh question bolted onto it.
+                if _is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1) or _has_temporal_leak(s1):
                     s1 = "Something has been on my mind"
 
                 rescue_q = _rescue_question(
@@ -1564,6 +1681,36 @@ def _has_contact_leak(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Temporal leak detector
+# _get_temporal_context() injects day/time/mood as "texture beneath the
+# surface — not instruction", and both system prompts explicitly say never to
+# name the day or time literally. That instruction alone isn't reliable —
+# this is the code-level gate that actually enforces it, same role as
+# _has_contact_leak / _has_physical_reality_intrusion above. Scoped to the
+# exact things called out (weekday names, weekend, tonight/this morning/
+# this evening, "it's late") — deliberately does NOT include "today" or
+# "this week", since several row-7 buttons legitimately ask HIM about his
+# own week/day, which is a different thing from the AI announcing its own
+# current moment.
+# ---------------------------------------------------------------------------
+
+_TEMPORAL_LEAK_PATTERNS = re.compile(
+    r'\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b'
+    r'|\bweekends?\b'
+    r'|\bweekdays?\b'
+    r'|\btonight\b'
+    r'|\blast\s+night\b'
+    r'|\bthis\s+(?:morning|afternoon|evening)\b'
+    r'|\bit.?s\s+(?:late|early)\b',
+    re.IGNORECASE,
+)
+
+
+def _has_temporal_leak(text: str) -> bool:
+    return bool(_TEMPORAL_LEAK_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
 # Physical reality intrusion detector
 # Catches AI inventing shared co-presence: same room, bar, workplace, eye contact.
 # The woman's own physical state (in bed, in shower, touching herself) is NOT intrusion.
@@ -1614,9 +1761,16 @@ def _has_male_anatomy_language(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _FORMULA_PATTERNS = re.compile(
-    r'\bwhat\s+kind\s+of\s+man\s+(are|were|would)\s+you\b'
+    r'\bwhat\s+kind\s+of\s+(?:man|woman|person)\s+(are|were|would)\s+you\b'
     r'|\bwhat\s+(?:did\s+it\s+feel\s+like|was\s+it\s+like)\s+the\s+first\s+time\s+a\s+woman\b'
-    r'|\bi\s+keep\s+\w+ing\b',
+    r'|\bi\s+keep\s+\w+ing\b'
+    r'|\bi\s+(?:have|\'ve)\s+been\s+replaying\b'
+    r'|\b(?:were|are)\s+you\s+before\s+you\s+(?:became|got|learned\s+to\s+be)\s+careful\b'
+    r'|\bbefore\s+(?:i|you)\s+(?:became|got|learned\s+to\s+be)\s+careful\b'
+    r'|\bi\'?m\s+(?:here|sitting\s+here|lying\s+here)\s+\w+ing\b'
+    r'|\bi\s+am\s+(?:here|sitting\s+here|lying\s+here)\s+\w+ing\b'
+    r'|\bi\'?(?:ve|\s+have)\s+been\s+sitting\s+here\s+\w+ing\b'
+    r'|\bhere\s+i\s+am[,]?\s+\w+ing\b',
     re.IGNORECASE,
 )
 

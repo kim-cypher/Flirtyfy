@@ -67,6 +67,7 @@ function Dashboard() {
         <span className="db-logo">Flirtyfy</span>
         <div className="db-nav-right">
           {user?.username && <span className="db-welcome">{user.username}</span>}
+          <button className="db-account-link" onClick={() => navigate('/')} type="button">Chat</button>
           <button className="db-account-link" onClick={() => navigate('/account')} type="button">Account</button>
           <button className="db-logout" onClick={handleLogout} type="button">Logout</button>
         </div>

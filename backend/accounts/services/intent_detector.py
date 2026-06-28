@@ -20,6 +20,7 @@ from .button_generator import (
     _get_temporal_context,
     _is_genuine_question,
     _has_formula_phrase,
+    _has_temporal_leak,
     _CHARACTER_BREAK_PATTERN,
     generate_button_response,
 )
@@ -78,8 +79,14 @@ WOMAN_PERSONA_SYSTEM = (
     "• Keep everything inside this conversation. No real cities, distances, schedules, or logistics.\n"
     "• NEVER use: amazing, interesting, awesome, great, nice, wonderful, incredible, perfect.\n"
     "• Plain, common, everyday words only — nothing literary, formal, or that needs a second read.\n"
-    "• Never open a sentence with 'I keep' + a verb ending in -ing ('I keep replaying', 'I keep catching myself', "
-    "'I keep coming back') — it is the most overused frame for ongoing thought. Use a different construction every time.\n"
+    "• Never say 'I have been replaying' or open a sentence with 'I keep' + a verb ending in -ing ('I keep replaying', "
+    "'I keep catching myself', 'I keep coming back') — it is the most overused frame for ongoing thought. Use a different construction every time.\n"
+    "• Never ask 'What kind of man/woman/person were you before you became careful' or any 'before you became/learned to be careful' framing — overused identity-armor cliché.\n"
+    "• Never open with 'I'm here ' + any verb ending in -ing ('I'm here thinking', 'I'm here wondering', 'I'm sitting here "
+    "replaying', 'I've been sitting here noticing') — it is a stage direction announcing a thought instead of just having it. "
+    "Start directly from the thought, feeling, or detail itself.\n"
+    "• Never use the word 'profile' or 'bio' to refer to him — respond to what he actually said or did, never to an "
+    "abstract dating-profile object.\n"
     "• When describing a physical reaction, do not default to 'chest' every time. Rotate across real options: "
     "throat, stomach, spine, hands, skin, breath, legs. Pick whichever fits the moment.\n"
     "• The day-of-week and time-of-day in your context shape her mood, never her words. Never name the day or "
@@ -693,6 +700,9 @@ _BANNED_OPENERS = (
     'that is ', "that's ", 'that sounds ', 'wow,', 'wow!', 'oh wow',
     'oh,', 'oh!', 'i appreciate', 'i understand', 'of course',
     'i feel comfortable', 'that needs', 'how lovely', 'absolutely,', 'certainly,',
+    # 'I'm here ___ing' / 'I'm sitting here ___ing' are covered by the more
+    # general _has_formula_phrase regex (any verb, not just 4 fixed ones),
+    # which is already part of the same quality gate this function feeds.
 )
 
 
@@ -868,6 +878,7 @@ def generate_context_aware_response(
             or not _is_complete(result)
             or not _is_genuine_question(result)
             or _has_formula_phrase(result)
+            or _has_temporal_leak(result)
         ):
             forced_q_word = random.choice(_FORCED_QUESTION_WORDS)
             retry_resp = get_anthropic_client().messages.create(
@@ -894,7 +905,15 @@ def generate_context_aware_response(
             retry_result = enforce_char_limit(retry_result, max_chars=max_chars)
             retry_result = validate_character_voice(retry_result)
             retry_result = ensure_ends_with_question(retry_result, max_chars=max_chars)
-            if _is_genuine_question(retry_result):
+            # Re-check the SAME gates that triggered this retry — previously only
+            # _is_genuine_question was re-checked, so a retry that still had a
+            # banned opener or formula phrase (e.g. "I keep replaying") shipped anyway.
+            if (
+                _is_genuine_question(retry_result)
+                and not _has_banned_opener(retry_result)
+                and not _has_formula_phrase(retry_result)
+                and not _has_temporal_leak(retry_result)
+            ):
                 result = retry_result
 
         # ── Phrase-level uniqueness — DB-backed, 30-day window ─────────────────

@@ -6,22 +6,22 @@
 
 import apiClient from './apiClient';
 
-// 36 button IDs — must match BUTTON_INTENTS keys in button_generator.py
+// 40 button IDs — must match BUTTON_INTENTS keys in button_generator.py
 const VALID_BUTTON_IDS = [
   // Row 1 — Opening & Re-entry
   'new_match', 'dead', 'you_went_silent', 'shower_fantasy', 'morning_flirt', 'after_work',
   // Row 2 — Emotional Connection
   'provider_energy', 'strategic_withdrawal', 'deep_emotion', 'lyrical_romance', 'vulnerability', 'family_talk',
   // Row 3 — Daily Life
-  'lunch_break', 'dont_go', 'weekend_plans', 'wine_stars', 'work_talk', 'food_talk',
+  'lunch_break', 'dont_go', 'wine_stars', 'work_talk',
   // Row 4 — Fantasy & Romance
-  'slow_dance', 'outdoor_fantasy', 'public_display', 'restaurant_fantasy', 'public_fantasy', 'kitchen_flirt',
+  'slow_dance', 'outdoor_fantasy', 'public_display', 'restaurant_fantasy', 'kitchen_flirt',
   // Row 5 — Personal & Deep
   'his_exes', 'secrets', 'long_without', 'bdsm_talk', 'kinky_at_work',
   // Row 6 — Sexual Escalation
-  'sensual_echo', 'bedroom_questions', 'positions', 'bedtime_fantasies', 'toy_play', 'fetishes',
+  'bedroom_questions', 'positions', 'bedtime_fantasies', 'toy_play', 'fetishes',
   // Row 7 — Personality & Connection
-  'daily_routine', 'hobbies_interests', 'childhood_memories', 'values_beliefs', 'humor_play', 'imagined_fantasy',
+  'daily_routine', 'hobbies_interests', 'values_beliefs', 'imagined_fantasy',
   'sensory_storytelling', 'future_dreams', 'shared_interests', 'food_cooking', 'emotional_checkin',
 ];
 
@@ -83,7 +83,7 @@ export const generateButtonResponse = async (buttonIntent, timeSlot = null) => {
 };
 
 /**
- * All 42 buttons in order (left→right, top→bottom).
+ * All 40 buttons in order (left→right, top→bottom).
  * Row 7 buttons appear below a divider in RightPanel.
  * emoji + shortLabel are used for the compact grid display.
  * description is used as tooltip title.
@@ -98,27 +98,24 @@ export const getAvailableButtons = () => [
   { id: 'after_work',           emoji: '🛋️', shortLabel: 'After Work',   row: 1, description: 'Day is done — what do you reach for?' },
 
   // ── Row 2 — Emotional Connection ────────────────────────────────────────
-  { id: 'provider_energy',      emoji: '💰', shortLabel: 'Provider',     row: 2, description: 'Make him feel like a strong protector' },
-  { id: 'strategic_withdrawal', emoji: '🥺', shortLabel: 'Withdraw',     row: 2, description: 'Pull back so he chases harder' },
+  { id: 'provider_energy',      emoji: '🛡️', shortLabel: 'Quiet Strength', row: 2, description: 'Make him feel like a strong protector' },
+  { id: 'strategic_withdrawal', emoji: '🍃', shortLabel: 'Need Space',   row: 2, description: 'Pull back so he chases harder' },
   { id: 'deep_emotion',         emoji: '💔', shortLabel: 'Deep Feel',    row: 2, description: 'Vulnerable admission — real and raw' },
-  { id: 'lyrical_romance',      emoji: '🎵', shortLabel: 'Lyrical',      row: 2, description: 'Poetic, song-like intensity' },
+  { id: 'lyrical_romance',      emoji: '💌', shortLabel: 'Sweet Words',  row: 2, description: 'Poetic, song-like intensity' },
   { id: 'vulnerability',        emoji: '💭', shortLabel: 'Vulnerable',   row: 2, description: 'The part you usually keep armored' },
   { id: 'family_talk',          emoji: '🏠', shortLabel: 'Family',       row: 2, description: 'How family shaped him — where he came from' },
 
   // ── Row 3 — Daily Life & Lifestyle ──────────────────────────────────────
   { id: 'lunch_break',          emoji: '🥗', shortLabel: 'Lunch',        row: 3, description: 'Midday — stolen time, who you think about' },
   { id: 'dont_go',              emoji: '🙏', shortLabel: 'Don\'t Go',    row: 3, description: 'He is leaving — a soft confession that makes him stay' },
-  { id: 'weekend_plans',        emoji: '🏖️', shortLabel: 'Weekend',      row: 3, description: 'Nowhere to be — what does your body want?' },
   { id: 'wine_stars',           emoji: '🍷', shortLabel: 'Wine & Stars', row: 3, description: 'Wine, open sky, who you want beside you' },
   { id: 'work_talk',            emoji: '💼', shortLabel: 'Work Talk',    row: 3, description: 'What drives him — and what happens when work gets complicated' },
-  { id: 'food_talk',            emoji: '🍳', shortLabel: 'Food Talk',    row: 3, description: 'Real favorites, what he cooks, the food tied to a memory' },
 
   // ── Row 4 — Fantasy & Romance ────────────────────────────────────────────
   { id: 'slow_dance',           emoji: '💃', shortLabel: 'Foreplay',     row: 4, description: 'How long, how slow, what he skips and should not' },
   { id: 'outdoor_fantasy',      emoji: '🌿', shortLabel: 'Outdoors',     row: 4, description: 'Outside, exposed, the risk of being seen — and wanting it' },
   { id: 'public_display',       emoji: '💋', shortLabel: 'Public PDA',   row: 4, description: 'Being claimed where people can see' },
   { id: 'restaurant_fantasy',   emoji: '🕯️', shortLabel: 'Restaurant',  row: 4, description: 'Restaurant vibes, best meals, and what happens under the table' },
-  { id: 'public_fantasy',       emoji: '🌃', shortLabel: 'Public',       row: 4, description: 'Walking in together — every head turning' },
   { id: 'kitchen_flirt',        emoji: '👩‍🍳', shortLabel: 'Kitchen',     row: 4, description: 'Apron only, held from behind, counter — the kitchen earns it' },
 
   // ── Row 5 — Personal & Deep ──────────────────────────────────────────────
@@ -129,7 +126,6 @@ export const getAvailableButtons = () => [
   { id: 'kinky_at_work',        emoji: '🖥️', shortLabel: 'Kinky Work',   row: 5, description: 'Closed doors, office proximity, explicit desire' },
 
   // ── Row 6 — Sexual Escalation ────────────────────────────────────────────
-  { id: 'sensual_echo',         emoji: '🔥', shortLabel: 'Sensual',      row: 6, description: 'Match his energy and go further' },
   { id: 'bedroom_questions',    emoji: '🛏️', shortLabel: 'Bedroom',      row: 6, description: 'Confess, then ask what he wants — explicitly' },
   { id: 'positions',            emoji: '😈', shortLabel: 'Positions',    row: 6, description: 'Go-to, what they reveal, what surprised her — and his' },
   { id: 'bedtime_fantasies',    emoji: '🌜', shortLabel: 'Bedtime',      row: 6, description: 'Unguarded hour — what you think about in the dark' },
@@ -139,10 +135,8 @@ export const getAvailableButtons = () => [
   // ── Row 7 — Personality & Connection (below divider) ─────────────────────
   { id: 'daily_routine',      emoji: '☀️', shortLabel: 'Daily Life',  row: 7, description: 'The unguarded texture of how he actually spends his days' },
   { id: 'hobbies_interests',  emoji: '🎨', shortLabel: 'Hobbies',     row: 7, description: 'What absorbs him completely when no one he needs to impress is watching' },
-  { id: 'childhood_memories', emoji: '🧸', shortLabel: 'Childhood',   row: 7, description: 'The kid still in there — a specific moment before he managed his feelings' },
   { id: 'values_beliefs',     emoji: '🧭', shortLabel: 'Values',      row: 7, description: 'What he stands by when it actually costs him something' },
-  { id: 'humor_play',         emoji: '😂', shortLabel: 'Humor',       row: 7, description: 'What kind of funny he is — the thing that breaks through without trying' },
-  { id: 'imagined_fantasy',   emoji: '✈️', shortLabel: 'Imagine',     row: 7, description: 'A sensory imagined scene — somewhere unreal, warm, vivid' },
+  { id: 'imagined_fantasy',   emoji: '🌌', shortLabel: 'Sensory Imagination', row: 7, description: 'A sensory imagined scene — somewhere unreal, warm, vivid' },
   { id: 'sensory_storytelling', emoji: '🌸', shortLabel: 'Sensory',     row: 7, description: 'A vivid sensory moment — scent, sound, taste, texture — that pulls him in' },
   { id: 'future_dreams',        emoji: '🌠', shortLabel: 'Future',      row: 7, description: 'The dreams and plans that show what he is actually motivated by' },
   { id: 'shared_interests',     emoji: '🎬', shortLabel: 'Shared Tastes', row: 7, description: 'Music, books, film — finding the real cultural overlap between you' },

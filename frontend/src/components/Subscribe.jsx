@@ -81,9 +81,13 @@ function Subscribe() {
   };
 
   const handleBackToChat = () => navigate('/');
+  const handleBack = () => navigate(-1);
 
   return (
     <div className="sub-root">
+      <button type="button" className="sub-back-btn" onClick={handleBack} aria-label="Go back">
+        ← Back
+      </button>
       <div className="sub-card">
         <FlirtyfyLogo size={32} textSize={22} />
 
