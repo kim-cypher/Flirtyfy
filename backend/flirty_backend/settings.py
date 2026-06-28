@@ -49,6 +49,13 @@ DEBUG = env.bool("DEBUG", default=True)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
+# Django admin's login has no rate limiting of its own (it's not a DRF view,
+# so accounts.throttles doesn't touch it) — moving it off the default
+# /admin/ path cuts out the constant automated-scanner noise that path gets
+# hit with. Set DJANGO_ADMIN_URL in production's .env to something private;
+# dev keeps using 'admin/' since no .env change is needed locally.
+ADMIN_URL = env("DJANGO_ADMIN_URL", default="admin/")
+
 
 # Application definition
 
@@ -199,12 +206,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
     ],
-    # Used by accounts.throttles — applied only to the AI-generation endpoints,
-    # not globally, since other endpoints (login, register) don't need this.
+    # See accounts.throttles — applied per-view, not globally.
     'DEFAULT_THROTTLE_RATES': {
         'generation_burst': '20/min',
         'generation_daily': '300/day',
         'payment_initiate': '5/min',
+        'login': '10/min',
+        'register': '5/min',
     },
 }
 

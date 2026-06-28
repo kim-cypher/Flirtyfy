@@ -20,7 +20,10 @@ from .services.safety_filter import SafetyFilter
 from .services.intent_template_classifier import get_content_fingerprint, get_template_key
 from .services.credits import get_available_clicks, try_consume_click, get_or_create_credits, gate_check
 from .services import mpesa_service
-from .throttles import GenerationBurstThrottle, GenerationDailyThrottle, PaymentInitiateThrottle
+from .throttles import (
+    GenerationBurstThrottle, GenerationDailyThrottle, PaymentInitiateThrottle,
+    LoginThrottle, RegisterThrottle,
+)
 from django.core.cache import cache
 from django.conf import settings
 from .novelty_models import AIReply, ConversationUpload
@@ -73,6 +76,8 @@ class RegisterView(APIView):
     User Registration Endpoint
     POST /api/register/ - Create a new user account
     """
+    throttle_classes = [RegisterThrottle]
+
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
@@ -93,6 +98,8 @@ class LoginView(APIView):
     User Login Endpoint
     POST /api/login/ - Login with email and password
     """
+    throttle_classes = [LoginThrottle]
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
@@ -508,10 +515,19 @@ class MpesaCallbackView(APIView):
     """
     POST /api/payments/mpesa-callback/
     Safaricom calls this directly — there is no user context on their side,
-    so this view takes no auth. Identifies the Payment by CheckoutRequestID,
-    grants credits on success, and is idempotent: a Payment already marked
-    success/failed/cancelled is left alone even if Safaricom retries the
-    callback (which it does on anything other than a 200 response).
+    so this view takes no auth. That also means it has NO authentication of
+    its OWN: CheckoutRequestID is returned to the paying user's browser by
+    InitiatePaymentView, so anyone could POST a forged "success" body here
+    for their own pending payment. The callback is therefore treated only
+    as a trigger to go check — never as proof. The actual crediting decision
+    is made by independently querying Safaricom's STK status endpoint with
+    our own credentials (mpesa_service.query_stk_status), which only
+    Safaricom can answer correctly.
+
+    Identifies the Payment by CheckoutRequestID and is idempotent: a
+    Payment already marked success/failed/cancelled is left alone even if
+    Safaricom retries the callback (which it does on anything other than a
+    200 response).
     """
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -539,10 +555,24 @@ class MpesaCallbackView(APIView):
             # Already processed — this is Safaricom retrying. Idempotent no-op.
             return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
 
-        payment.raw_callback = data
-        if parsed['success']:
+        # Authoritative check — ignores parsed['success'] entirely. The
+        # callback body only tells us WHICH payment to go verify.
+        try:
+            verified = mpesa_service.query_stk_status(checkout_request_id)
+        except Exception as e:
+            # Cannot confirm either way — leave status as 'pending' rather than
+            # guessing. Logged loudly so this can be investigated/resolved
+            # manually (e.g. via admin) rather than silently crediting or
+            # silently failing a real payment on a transient network error.
+            logger.error(f"M-Pesa status query failed for {checkout_request_id}: {e}")
+            payment.raw_callback = data
+            payment.save(update_fields=['raw_callback', 'updated_at'])
+            return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
+
+        payment.raw_callback = {'callback': data, 'verified_query': verified}
+        if verified['success']:
             payment.status = 'success'
-            payment.mpesa_receipt_number = parsed['receipt_number']
+            payment.mpesa_receipt_number = parsed.get('receipt_number', '')
             payment.save(update_fields=['status', 'mpesa_receipt_number', 'raw_callback', 'updated_at'])
 
             from .services.credits import grant_credits
@@ -554,7 +584,7 @@ class MpesaCallbackView(APIView):
                 f"{payment.clicks_granted} clicks have been added to your account."
             )
         else:
-            payment.status = 'cancelled' if 'cancel' in parsed['result_desc'].lower() else 'failed'
+            payment.status = 'cancelled' if 'cancel' in verified['result_desc'].lower() else 'failed'
             payment.save(update_fields=['status', 'raw_callback', 'updated_at'])
             from .services.notifications import create_notification
             create_notification(

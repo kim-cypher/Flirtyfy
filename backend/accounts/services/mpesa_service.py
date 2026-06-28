@@ -95,6 +95,47 @@ def initiate_stk_push(phone_number: str, amount, account_reference: str = 'Flirt
     return resp.json()
 
 
+def query_stk_status(checkout_request_id: str) -> dict:
+    """
+    Independently asks Safaricom whether a CheckoutRequestID actually
+    succeeded, using OUR OWN authenticated credentials — not the incoming
+    callback body. This is the actual security boundary for crediting a
+    payment: CheckoutRequestID is known to the user's own browser (it's
+    returned by InitiatePaymentView), so anyone could POST a forged
+    "success" callback claiming their own pending payment went through.
+    Only Safaricom's answer to this authenticated query can be trusted.
+
+    Returns {'success': bool, 'result_code': int|None, 'result_desc': str}.
+    Raises requests.RequestException on network/auth failure — callers
+    must treat that as "cannot confirm" and NOT credit, not as a success.
+    """
+    token = get_access_token()
+    password, timestamp = _password_and_timestamp()
+
+    payload = {
+        "BusinessShortCode": settings.MPESA_SHORTCODE,
+        "Password": password,
+        "Timestamp": timestamp,
+        "CheckoutRequestID": checkout_request_id,
+    }
+    resp = requests.post(
+        f"{_base_url()}/mpesa/stkpushquery/v1/query",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    result_code = data.get('ResultCode')
+    # Daraja returns ResultCode as a string here ("0"), unlike the callback's int.
+    success = str(result_code) == '0'
+    return {
+        'success': success,
+        'result_code': result_code,
+        'result_desc': data.get('ResultDesc', ''),
+    }
+
+
 def parse_callback(data: dict) -> dict:
     """
     Parses the Daraja STK callback payload (the POST body Safaricom sends to
