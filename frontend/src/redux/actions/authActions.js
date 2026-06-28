@@ -1,5 +1,23 @@
 import apiClient from '../../services/apiClient';
 
+// DRF error shapes vary: {message}, {detail}, {non_field_errors: [...]},
+// or {field: [...]} — and some backend ValidationErrors raise a plain
+// string per field instead of a list, which earlier code only checked for
+// arrays, so those messages silently fell back to a generic "X failed".
+// This pulls the first usable message out of whatever shape comes back.
+export function extractErrorMessage(errorData, fallback) {
+  if (!errorData) return fallback;
+  if (typeof errorData === 'string') return errorData;
+  if (errorData.message) return errorData.message;
+  if (errorData.detail) return errorData.detail;
+  for (const key of Object.keys(errorData)) {
+    const val = errorData[key];
+    if (Array.isArray(val) && val.length) return String(val[0]);
+    if (typeof val === 'string' && val) return val;
+  }
+  return fallback;
+}
+
 export const login = (email, password) => async (dispatch) => {
   dispatch({ type: 'LOGIN_REQUEST' });
   try {
@@ -15,25 +33,7 @@ export const login = (email, password) => async (dispatch) => {
     });
     return response.data;
   } catch (error) {
-    // Extract error message from various response formats
-    let errorMessage = 'Login failed';
-    const errorData = error.response?.data;
-    
-    if (errorData) {
-      // Try extracting from various possible error formats
-      if (errorData.message) {
-        errorMessage = errorData.message;
-      } else if (errorData.non_field_errors && Array.isArray(errorData.non_field_errors)) {
-        errorMessage = errorData.non_field_errors[0];
-      } else if (errorData.email && Array.isArray(errorData.email)) {
-        errorMessage = errorData.email[0];
-      } else if (errorData.password && Array.isArray(errorData.password)) {
-        errorMessage = errorData.password[0];
-      } else if (errorData.detail) {
-        errorMessage = errorData.detail;
-      }
-    }
-    
+    const errorMessage = extractErrorMessage(error.response?.data, 'Login failed');
     dispatch({
       type: 'LOGIN_FAILURE',
       payload: errorMessage,
@@ -42,12 +42,13 @@ export const login = (email, password) => async (dispatch) => {
   }
 };
 
-export const register = (username, email, password, confirmPassword, dateOfBirth, referralCode = '') => async (dispatch) => {
+export const register = (username, email, firstName, password, confirmPassword, dateOfBirth, referralCode = '') => async (dispatch) => {
   dispatch({ type: 'REGISTER_REQUEST' });
   try {
     const response = await apiClient.post('/register/', {
       username,
       email,
+      first_name: firstName,
       password,
       confirmPassword,
       date_of_birth: dateOfBirth, // Convert camelCase to snake_case for backend
@@ -61,34 +62,26 @@ export const register = (username, email, password, confirmPassword, dateOfBirth
     });
     return response.data;
   } catch (error) {
-    // Extract error message from various response formats
-    let errorMessage = 'Registration failed';
-    const errorData = error.response?.data;
-    
-    if (errorData) {
-      // Try extracting from various possible error formats
-      if (errorData.message) {
-        errorMessage = errorData.message;
-      } else if (errorData.non_field_errors && Array.isArray(errorData.non_field_errors)) {
-        errorMessage = errorData.non_field_errors[0];
-      } else if (errorData.email && Array.isArray(errorData.email)) {
-        errorMessage = errorData.email[0];
-      } else if (errorData.username && Array.isArray(errorData.username)) {
-        errorMessage = errorData.username[0];
-      } else if (errorData.password && Array.isArray(errorData.password)) {
-        errorMessage = errorData.password[0];
-      } else if (errorData.date_of_birth && Array.isArray(errorData.date_of_birth)) {
-        errorMessage = errorData.date_of_birth[0];
-      } else if (errorData.detail) {
-        errorMessage = errorData.detail;
-      }
-    }
-    
+    const errorMessage = extractErrorMessage(error.response?.data, 'Registration failed');
     dispatch({
       type: 'REGISTER_FAILURE',
       payload: errorMessage,
     });
     throw error;
+  }
+};
+
+export const resetPassword = (email, firstName, newPassword, confirmNewPassword) => async (dispatch) => {
+  try {
+    const response = await apiClient.post('/password-reset/', {
+      email,
+      first_name: firstName,
+      new_password: newPassword,
+      confirm_new_password: confirmNewPassword,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error.response?.data, 'Password reset failed'));
   }
 };
 

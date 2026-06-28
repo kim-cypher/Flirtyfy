@@ -11,7 +11,7 @@
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: #e0d4f8;
+  color: #ffffff;
   letter-spacing: 0.3px;
 }
 
@@ -29,10 +29,10 @@
   flex: 1;
   min-height: 200px;
   padding: 14px 16px;
-  background: #111128;
-  border: 1.5px solid #2e2e4a;
+  background: #0a0a0a;
+  border: 1.5px solid #333333;
   border-radius: 10px;
-  color: #d8d0f0;
+  color: #ffffff;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.65;
@@ -42,12 +42,12 @@
   box-sizing: border-box;
 }
 
-.conversation-textarea::placeholder { color: #3e3e5e; }
+.conversation-textarea::placeholder { color: #666666; }
 
 .conversation-textarea:focus {
-  border-color: #6c4fc9;
-  background: #14143a;
-  box-shadow: 0 0 0 3px rgba(108, 79, 201, 0.12);
+  border-color: #ffffff;
+  background: #111111;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
 }
 
 .conversation-textarea:disabled {
@@ -58,7 +58,7 @@
 
 .conversation-textarea::-webkit-scrollbar { width: 5px; }
 .conversation-textarea::-webkit-scrollbar-track { background: transparent; }
-.conversation-textarea::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+.conversation-textarea::-webkit-scrollbar-thumb { background: #444444; border-radius: 3px; }
 
 /* Char count row */
 .char-row {
@@ -69,7 +69,7 @@
 
 .char-count {
   font-size: 11px;
-  color: #5a5a7a;
+  color: #999999;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -77,14 +77,14 @@
 .progress-track {
   flex: 1;
   height: 3px;
-  background: #2a2a44;
+  background: #2a2a2a;
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6c4fc9, #9d7de8);
+  background: #ffffff;
   border-radius: 2px;
   transition: width 0.25s ease, background 0.25s;
 }
@@ -106,7 +106,7 @@
 
 .inline-hint {
   font-size: 12px;
-  color: #5a5a7a;
+  color: #999999;
   padding: 0 2px;
 }
 
@@ -133,53 +133,53 @@
 
 .btn-generate {
   flex: 1;
-  background: linear-gradient(135deg, #6c4fc9, #8b6ee0);
-  color: #fff;
-  box-shadow: 0 3px 12px rgba(108, 79, 201, 0.28);
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 3px 12px rgba(255, 255, 255, 0.18);
 }
 
 .btn-generate:hover:not(:disabled) {
-  background: linear-gradient(135deg, #7d5fd9, #9d80f0);
-  box-shadow: 0 5px 18px rgba(108, 79, 201, 0.38);
+  background: #e6e6e6;
+  box-shadow: 0 5px 18px rgba(255, 255, 255, 0.28);
   transform: translateY(-1px);
 }
 
 .btn-generate:active:not(:disabled) { transform: translateY(0); }
 
 .btn-generate:disabled {
-  background: linear-gradient(135deg, #3a3a54, #4a4a64);
-  color: #6a6a8a;
+  background: #2a2a2a;
+  color: #777777;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .btn-generate.loading {
-  background: linear-gradient(135deg, #7d5fd9, #9d80f0);
+  background: #e6e6e6;
   cursor: wait;
 }
 
 .btn-clear {
   padding: 12px 18px;
-  background: #1c1c38;
-  color: #6a6a8a;
-  border: 1.5px solid #2e2e4a;
+  background: #0a0a0a;
+  color: #999999;
+  border: 1.5px solid #333333;
 }
 
 .btn-clear:hover:not(:disabled) {
-  background: #262642;
-  border-color: #5a4a8a;
-  color: #a0a0c8;
+  background: #1a1a1a;
+  border-color: #ffffff;
+  color: #ffffff;
 }
 
 .btn-clear:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Spinner */
+/* Spinner — sits on the (now white) loading button, so it's dark-on-light */
 .btn-spinner {
   display: inline-block;
   width: 13px;
   height: 13px;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: #000;
   border-radius: 50%;
   animation: spin 0.75s linear infinite;
   flex-shrink: 0;

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useSelector } from 'react-redux';
 import Login from './components/Login';
 import Register from './components/Register';
+import ResetPassword from './components/ResetPassword';
 import Dashboard from './components/Dashboard';
 import Chat from './components/Chat';
 import Subscribe from './components/Subscribe';
@@ -35,9 +36,13 @@ function App() {
             path="/login" 
             element={!isAuthenticated ? <Login /> : <Navigate to="/" />} 
           />
-          <Route 
-            path="/register" 
-            element={!isAuthenticated ? <Register /> : <Navigate to="/" />} 
+          <Route
+            path="/register"
+            element={!isAuthenticated ? <Register /> : <Navigate to="/" />}
+          />
+          <Route
+            path="/reset-password"
+            element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/" />}
           />
 
           {/* Main Routes - only accessible if authenticated */}

@@ -4,8 +4,8 @@
 
 .notif-bell-btn {
   position: relative;
-  background: #131328;
-  border: 1.5px solid #2a2a44;
+  background: #0a0a0a;
+  border: 1.5px solid #333333;
   border-radius: 9px;
   padding: 7px 10px;
   font-size: 16px;
@@ -15,16 +15,16 @@
 }
 
 .notif-bell-btn:hover {
-  background: #1e1e40;
-  border-color: #6c4fc9;
+  background: #1a1a1a;
+  border-color: #ffffff;
 }
 
 .notif-bell-badge {
   position: absolute;
   top: -5px;
   right: -5px;
-  background: #e05555;
-  color: #fff;
+  background: #ffffff;
+  color: #000000;
   font-size: 10px;
   font-weight: 800;
   border-radius: 999px;
@@ -34,7 +34,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 3px;
-  box-shadow: 0 0 6px rgba(224, 85, 85, 0.6);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
 }
 
 .notif-dropdown {
@@ -43,8 +43,8 @@
   right: 0;
   width: 320px;
   max-height: 400px;
-  background: #131328;
-  border: 1.5px solid #2a2a44;
+  background: #0a0a0a;
+  border: 1.5px solid #333333;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   z-index: 1000;
@@ -58,16 +58,16 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #2a2a44;
+  border-bottom: 1px solid #333333;
   font-size: 13px;
   font-weight: 800;
-  color: #d8ccf8;
+  color: #ffffff;
 }
 
 .notif-mark-all {
   background: none;
   border: none;
-  color: #9b78f0;
+  color: #cccccc;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -75,7 +75,7 @@
 }
 
 .notif-mark-all:hover {
-  color: #c8bcf0;
+  color: #ffffff;
 }
 
 .notif-list {
@@ -86,7 +86,7 @@
 .notif-empty {
   padding: 24px 14px;
   text-align: center;
-  color: #6a6490;
+  color: #999999;
   font-size: 12px;
 }
 
@@ -99,27 +99,27 @@
   padding: 11px 14px;
   background: none;
   border: none;
-  border-bottom: 1px solid #1e1e38;
+  border-bottom: 1px solid #222222;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
 .notif-item:hover {
-  background: #1a1a38;
+  background: #1a1a1a;
 }
 
 .notif-item--unread {
-  background: rgba(108, 79, 201, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .notif-item-title {
   font-size: 12.5px;
   font-weight: 800;
-  color: #d8ccf8;
+  color: #ffffff;
 }
 
 .notif-item-body {
   font-size: 11.5px;
-  color: #9088bc;
+  color: #cccccc;
   line-height: 1.4;
 }

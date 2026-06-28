@@ -13,7 +13,7 @@ from rest_framework.status import (
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import TokenAuthentication
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
+from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, PasswordResetSerializer
 from .services.button_generator import generate_button_response
 from .services.intent_detector import detect_intent, generate_context_aware_response
 from .services.safety_filter import SafetyFilter
@@ -22,7 +22,7 @@ from .services.credits import get_available_clicks, try_consume_click, get_or_cr
 from .services import mpesa_service
 from .throttles import (
     GenerationBurstThrottle, GenerationDailyThrottle, PaymentInitiateThrottle,
-    LoginThrottle, RegisterThrottle,
+    LoginThrottle, RegisterThrottle, PasswordResetThrottle,
 )
 from django.core.cache import cache
 from django.conf import settings
@@ -114,6 +114,31 @@ class LoginView(APIView):
         logger.warning(f"Login failed: {serializer.errors}")
         return Response(serializer.errors, status=HTTP_400_BAD_REQUEST)
 
+
+
+class PasswordResetView(APIView):
+    """
+    POST /api/password-reset/ - Reset a forgotten password using
+    (email, first_name) as the identity check instead of an email link.
+    Body: {email, first_name, new_password, confirm_new_password}
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetThrottle]
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            user.set_password(serializer.validated_data['new_password'])
+            user.save(update_fields=['password'])
+            # Invalidate any existing session token — old token shouldn't
+            # keep working once the password it was issued under is gone.
+            Token.objects.filter(user=user).delete()
+            logger.info(f"Password reset for user: {user.username} ({user.id})")
+            return Response({'message': 'Your password has been reset. Please log in.'}, status=HTTP_200_OK)
+        logger.warning(f"Password reset failed: {serializer.errors}")
+        return Response(serializer.errors, status=HTTP_400_BAD_REQUEST)
 
 
 class GenerateSpecificResponseView(APIView):

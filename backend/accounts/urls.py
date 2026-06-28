@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    RegisterView, LoginView, GenerateSpecificResponseView, GenerateButtonResponseView,
+    RegisterView, LoginView, PasswordResetView, GenerateSpecificResponseView, GenerateButtonResponseView,
     CreditsView, NotificationListView, NotificationMarkReadView,
     InitiatePaymentView, PaymentStatusView, MpesaCallbackView,
 )
@@ -14,6 +14,7 @@ urlpatterns = [
 
     path('register/', RegisterView.as_view(), name='register'),
     path('login/', LoginView.as_view(), name='login'),
+    path('password-reset/', PasswordResetView.as_view(), name='password-reset'),
 
     path('chat/generate-specific/', GenerateSpecificResponseView.as_view(), name='generate-specific'),
     path('chat/generate-button/', GenerateButtonResponseView.as_view(), name='generate-button'),

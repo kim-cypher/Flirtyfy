@@ -33,3 +33,9 @@ class LoginThrottle(AnonRateThrottle):
 
 class RegisterThrottle(AnonRateThrottle):
     scope = 'register'
+
+
+# Without this, anyone could brute-force (email, first_name) pairs to take
+# over accounts via the password-reset endpoint.
+class PasswordResetThrottle(AnonRateThrottle):
+    scope = 'password_reset'

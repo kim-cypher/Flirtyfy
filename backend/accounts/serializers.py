@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.core.exceptions import MultipleObjectsReturned
 from datetime import date
@@ -11,25 +13,32 @@ class RegisterSerializer(serializers.ModelSerializer):
     """Serializer for user registration with age verification"""
     password = serializers.CharField(write_only=True)
     confirmPassword = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(max_length=150)
     date_of_birth = serializers.DateField()
     referral_code = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password', 'confirmPassword', 'date_of_birth', 'referral_code']
+        fields = ['email', 'username', 'first_name', 'password', 'confirmPassword', 'date_of_birth', 'referral_code']
 
     def validate(self, data):
         """Validate passwords match and user is 18+"""
         if data['password'] != data['confirmPassword']:
             raise serializers.ValidationError({
-                "password": "Passwords do not match."
+                "password": ["Passwords do not match."]
             })
 
-        # Check if email already exists
+        try:
+            password_validation.validate_password(data['password'])
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
+
+        # Check if email already exists (case-insensitive — Bob@x.com and
+        # bob@x.com are the same account as far as login/reset are concerned)
         email = data.get('email')
-        if User.objects.filter(email=email).exists():
+        if User.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError({
-                "email": "A user with this email already exists."
+                "email": ["A user with this email already exists."]
             })
 
         # Check age is 18+
@@ -41,7 +50,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         if age < 18:
             raise serializers.ValidationError({
-                "date_of_birth": "You must be at least 18 years old to use Flirty. This app contains adult conversations."
+                "date_of_birth": ["You must be at least 18 years old to use Flirtyfy. This app contains adult conversations."]
             })
 
         return data
@@ -97,12 +106,12 @@ class LoginSerializer(serializers.Serializer):
         password = data.get('password')
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             raise serializers.ValidationError("Invalid email or password.")
         except MultipleObjectsReturned:
             # If multiple users with same email exist (legacy data), use the most recent one
-            user = User.objects.filter(email=email).order_by('-date_joined').first()
+            user = User.objects.filter(email__iexact=email).order_by('-date_joined').first()
             if not user:
                 raise serializers.ValidationError("Invalid email or password.")
 
@@ -120,6 +129,42 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("User profile not found. Please register again.")
 
         return {'user': user}
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    """
+    No-email-link reset flow: an account is identified by (email, first_name)
+    together — first names alone are not unique, but combined with the email
+    they always pin down exactly one account. On match, the password is reset
+    immediately.
+    """
+    email = serializers.EmailField()
+    first_name = serializers.CharField(max_length=150)
+    new_password = serializers.CharField(write_only=True)
+    confirm_new_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data['new_password'] != data['confirm_new_password']:
+            raise serializers.ValidationError({
+                "new_password": ["Passwords do not match."]
+            })
+
+        try:
+            password_validation.validate_password(data['new_password'])
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"new_password": list(e.messages)})
+
+        user = User.objects.filter(
+            email__iexact=data['email'].strip(),
+            first_name__iexact=data['first_name'].strip(),
+        ).first()
+        if not user:
+            raise serializers.ValidationError({
+                "non_field_errors": ["We couldn't find an account matching that email and first name."]
+            })
+
+        data['user'] = user
+        return data
 
 
 class UserSerializer(serializers.ModelSerializer):

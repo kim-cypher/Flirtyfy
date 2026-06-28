@@ -17,8 +17,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border-bottom: 2px solid #6c4fc9;
+  background: #000000;
+  border-bottom: 2px solid #ffffff;
   padding: 12px 24px;
   gap: 20px;
   flex-shrink: 0;
@@ -82,10 +82,10 @@
 /* Navigation Buttons */
 .btn-nav {
   padding: 8px 16px;
-  background-color: #2a2a4a;
-  border: 1px solid #4a4a6a;
+  background-color: #0a0a0a;
+  border: 1px solid #333333;
   border-radius: 999px;
-  color: #999;
+  color: #ccc;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -93,9 +93,9 @@
 }
 
 .btn-nav:hover {
-  background-color: #3a3a5a;
-  border-color: #6c4fc9;
-  color: #ccc;
+  background-color: #1a1a1a;
+  border-color: #ffffff;
+  color: #ffffff;
 }
 
 .btn-nav:active {
@@ -104,32 +104,32 @@
 
 .credits-badge {
   padding: 8px 14px;
-  background: #1a1a38;
-  border: 1.5px solid #6c4fc9;
+  background: #0a0a0a;
+  border: 1.5px solid #ffffff;
   border-radius: 999px;
-  color: #c8bcf0;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   transition: all 0.15s ease;
-  box-shadow: 0 0 10px rgba(108, 79, 201, 0.2);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
 }
 
 .credits-badge--premium {
-  background: linear-gradient(135deg, #2a2010, #3a2a10);
-  border-color: #d4af37;
-  color: #f0d080;
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
   cursor: default;
-  box-shadow: 0 0 10px rgba(212, 175, 55, 0.25);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .credits-badge:hover {
-  background: #22224a;
-  box-shadow: 0 0 14px rgba(108, 79, 201, 0.4);
+  background: #1a1a1a;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.3);
 }
 
 .user-name {
-  color: #8b7bc9;
+  color: #cccccc;
   font-size: 12px;
   font-weight: 600;
   padding: 0 8px;
@@ -137,10 +137,10 @@
 
 .btn-logout {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #ff6b6b, #ff8787);
-  border: none;
+  background: #0a0a0a;
+  border: 1.5px solid #ffffff;
   border-radius: 999px;
-  color: #fff;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -148,9 +148,10 @@
 }
 
 .btn-logout:hover {
-  background: linear-gradient(135deg, #ff8787, #ffa3a3);
+  background: #ffffff;
+  color: #000000;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
 }
 
 .btn-logout:active {
@@ -163,15 +164,15 @@
   align-items: center;
   gap: 7px;
   padding: 10px 24px;
-  background: #0b0b1e;
-  border-bottom: 1px solid #1e1e38;
+  background: #000000;
+  border-bottom: 1px solid #222222;
   flex-shrink: 0;
 }
 
 .time-bar-label {
   font-size: 11px;
   font-weight: 700;
-  color: #4a4470;
+  color: #888888;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   white-space: nowrap;
@@ -181,10 +182,10 @@
 .time-chip {
   flex: 1;
   padding: 10px 6px;
-  background: #0e0e24;
-  border: 1.5px solid #22223a;
+  background: #0a0a0a;
+  border: 1.5px solid #2a2a2a;
   border-radius: 9px;
-  color: #6a6490;
+  color: #999999;
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
@@ -196,16 +197,16 @@
 }
 
 .time-chip.active {
-  background: #1a1a38;
-  border-color: #6c4fc9;
-  color: #c8bcf0;
-  box-shadow: 0 0 10px rgba(108, 79, 201, 0.3);
+  background: #1a1a1a;
+  border-color: #ffffff;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.25);
 }
 
 .time-chip:hover:not(.active) {
-  border-color: #3a3a60;
-  color: #9088bc;
-  background: #131328;
+  border-color: #555555;
+  color: #ffffff;
+  background: #141414;
 }
 
 @media (max-width: 768px) {
@@ -223,7 +224,7 @@
 .time-checkin-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(5, 5, 15, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -231,8 +232,8 @@
 }
 
 .time-checkin-modal {
-  background: #131328;
-  border: 1.5px solid #2a2a44;
+  background: #0a0a0a;
+  border: 1.5px solid #333333;
   border-radius: 12px;
   padding: 22px 24px;
   max-width: 360px;
@@ -241,7 +242,7 @@
 
 .time-checkin-text {
   margin: 0 0 16px 0;
-  color: #d8ccf8;
+  color: #ffffff;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -258,28 +259,28 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  border: 1.5px solid #2a2a44;
+  border: 1.5px solid #333333;
   transition: all 0.15s ease;
 }
 
 .time-checkin-btn.keep {
-  background: #1a1a38;
-  color: #c8bcf0;
-  border-color: #6c4fc9;
+  background: #1a1a1a;
+  color: #ffffff;
+  border-color: #ffffff;
 }
 
 .time-checkin-btn.keep:hover {
-  background: #22224a;
+  background: #262626;
 }
 
 .time-checkin-btn.switch {
-  background: #0e0e24;
-  color: #9088bc;
+  background: #0a0a0a;
+  color: #cccccc;
 }
 
 .time-checkin-btn.switch:hover {
-  border-color: #3a3a60;
-  color: #c8bcf0;
+  border-color: #ffffff;
+  color: #ffffff;
 }
 
 /* Chat Interface Wrapper */

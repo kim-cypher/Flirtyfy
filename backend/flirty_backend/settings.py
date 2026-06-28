@@ -123,18 +123,12 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#password-validation
 
+# Kept deliberately minimal — users want a simple password (e.g. "Dave"),
+# no complexity/similarity/common-password rules, just a sane minimum length.
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'OPTIONS': {'min_length': 4},
     },
 ]
 
@@ -213,6 +207,7 @@ REST_FRAMEWORK = {
         'payment_initiate': '5/min',
         'login': '10/min',
         'register': '5/min',
+        'password_reset': '5/min',
     },
 }
 

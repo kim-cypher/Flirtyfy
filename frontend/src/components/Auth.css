@@ -164,6 +164,36 @@
   color: #9b8e86;
 }
 
+/* ── Date of birth — three plain selects, year list starts at 18+ ──────── */
+
+.auth-dob-row {
+  display: flex;
+  gap: 10px;
+}
+
+.auth-dob-row select {
+  flex: 1;
+  padding: 12px 10px;
+  background: #ffffff;
+  border: 1.5px solid #e5ddd6;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #0f0c0e;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.auth-dob-row select:focus {
+  border-color: #c8824a;
+  box-shadow: 0 0 0 3px rgba(200, 130, 74, 0.12);
+}
+
+.auth-dob-row select:disabled {
+  background: #f5f0eb;
+  cursor: not-allowed;
+  color: #9b8e86;
+}
+
 /* ── Submit button ───────────────────────────────────────────────────────── */
 
 .auth-submit {

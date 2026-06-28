@@ -2,8 +2,8 @@
 
 .output-area {
   border-radius: 10px;
-  border: 1.5px solid #2e2e4a;
-  background: #0e0e22;
+  border: 1.5px solid #2a2a2a;
+  background: #0a0a0a;
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
@@ -20,7 +20,7 @@
 
 .output-empty-text {
   margin: 0;
-  color: #3a3a5a;
+  color: #555555;
   font-size: 13px;
   text-align: center;
 }
@@ -43,16 +43,16 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  border-color: rgba(108, 79, 201, 0.35);
-  background: rgba(108, 79, 201, 0.04);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .output-spinner {
   display: block;
   width: 30px;
   height: 30px;
-  border: 2.5px solid rgba(108, 79, 201, 0.2);
-  border-top-color: #8b6ee0;
+  border: 2.5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
   border-radius: 50%;
   animation: spin 0.85s linear infinite;
 }
@@ -61,19 +61,19 @@
 
 .output-loading-text {
   margin: 0;
-  color: #8b6ee0;
+  color: #cccccc;
   font-size: 13px;
 }
 
 /* Ready — response visible */
 .output-ready {
-  border-color: #4a3a7a;
-  background: linear-gradient(160deg, #0e0e22 0%, #14123a 100%);
+  border-color: #333333;
+  background: linear-gradient(160deg, #0a0a0a 0%, #161616 100%);
 }
 
 .output-reply-text {
   margin: 0;
-  color: #e8e0ff;
+  color: #ffffff;
   font-size: 15px;
   line-height: 1.75;
   font-style: italic;
@@ -86,15 +86,15 @@
   display: flex;
   justify-content: flex-end;
   padding-top: 10px;
-  border-top: 1px solid #2a2a44;
+  border-top: 1px solid #2a2a2a;
 }
 
 .btn-copy {
   padding: 9px 20px;
-  background: #1e1e3c;
-  border: 1.5px solid #4a3a7a;
+  background: #1a1a1a;
+  border: 1.5px solid #333333;
   border-radius: 7px;
-  color: #9d87e0;
+  color: #cccccc;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -103,9 +103,9 @@
 }
 
 .btn-copy:hover {
-  background: #2a2a50;
-  border-color: #8b6ee0;
-  color: #c0aeff;
+  background: #262626;
+  border-color: #ffffff;
+  color: #ffffff;
 }
 
 .btn-copy:active { transform: scale(0.97); }
