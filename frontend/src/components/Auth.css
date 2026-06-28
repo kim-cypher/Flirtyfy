@@ -43,17 +43,8 @@
 }
 
 .auth-brand-logomark {
-  width: 52px;
-  height: 52px;
-  background: linear-gradient(135deg, #c8824a 0%, #e0a87a 100%);
-  border-radius: 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  font-weight: 900;
-  color: #0f0c0e;
-  letter-spacing: -1px;
   margin-bottom: 40px;
 }
 

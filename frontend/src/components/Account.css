@@ -1,0 +1,192 @@
+/* ── Account page — profile, plan, referral ─────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+.acct-root {
+  min-height: 100vh;
+  width: 100%;
+  background: #0b080c;
+  font-family: inherit;
+}
+
+/* ── Navbar ──────────────────────────────────────────────────────────────── */
+
+.acct-nav {
+  padding: 22px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.acct-logo {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: rgba(240, 236, 230, 0.55);
+}
+
+.acct-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.acct-nav-link,
+.acct-logout {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: rgba(240, 236, 230, 0.45);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.acct-nav-link:hover,
+.acct-logout:hover {
+  color: rgba(240, 236, 230, 0.85);
+}
+
+/* ── Main ────────────────────────────────────────────────────────────────── */
+
+.acct-main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 40px 32px 80px;
+}
+
+.acct-title {
+  margin: 0 0 28px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #f0ece6;
+}
+
+.acct-card {
+  padding: 26px 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.acct-card-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f0ece6;
+}
+
+.acct-profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.acct-profile-row:last-of-type {
+  border-bottom: none;
+}
+
+.acct-profile-label {
+  font-size: 13px;
+  color: #8a8480;
+}
+
+.acct-profile-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0ece6;
+}
+
+.acct-plan-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cfc8c2;
+}
+
+.acct-plan-badge--premium {
+  background: rgba(212, 175, 55, 0.15);
+  color: #d4af37;
+}
+
+.acct-subscribe-btn {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 13px;
+  background: #f0ece6;
+  color: #0b080c;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.acct-subscribe-btn:hover {
+  background: #ffffff;
+}
+
+/* ── Referral ────────────────────────────────────────────────────────────── */
+
+.acct-clicks {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: #cfc8c2;
+}
+
+.acct-clicks strong {
+  color: #f0ece6;
+}
+
+.acct-card-desc {
+  margin: 0 0 16px 0;
+  font-size: 12.5px;
+  color: #8a8480;
+  line-height: 1.5;
+}
+
+.acct-referral-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.acct-referral-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: #0b080c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #cfc8c2;
+  font-size: 12.5px;
+}
+
+.acct-referral-copy {
+  padding: 10px 16px;
+  background: #f0ece6;
+  color: #0b080c;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.acct-referral-copy:hover {
+  background: #ffffff;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .acct-nav { padding: 18px 24px; }
+  .acct-main { padding: 32px 20px 60px; }
+  .acct-card { padding: 22px 20px; }
+}

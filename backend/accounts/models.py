@@ -39,6 +39,10 @@ class UserCredits(models.Model):
     # grant pushes the balance back up.
     low_clicks_notified = models.BooleanField(default=False)
     out_of_clicks_notified = models.BooleanField(default=False)
+    # Unlimited clicks, never deducted. Set automatically when the user's
+    # email matches a PremiumEmail row (see signals.py), or toggled directly
+    # here in admin for a manual override.
+    is_premium = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def available_clicks(self) -> int:
@@ -128,3 +132,25 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.amount_kes} KES - {self.status}"
+
+
+class PremiumEmail(models.Model):
+    """
+    Admin-managed allowlist. Adding a row here immediately flips that user
+    to premium (unlimited clicks) if the account already exists, and
+    automatically flips them to premium the moment they register if it
+    doesn't exist yet — see signals.py for both paths.
+    """
+    email = models.EmailField(unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.email
+
+    class Meta:
+        verbose_name = 'Premium Email'
+        verbose_name_plural = 'Premium Emails'

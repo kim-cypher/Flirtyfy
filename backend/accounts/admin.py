@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
-from .models import UserProfile, UserCredits, CreditGrant, Notification, Payment
+from .models import UserProfile, UserCredits, CreditGrant, Notification, Payment, PremiumEmail
 
 
 class UserProfileInline(admin.StackedInline):
@@ -28,8 +28,11 @@ class CreditGrantInline(admin.TabularInline):
 
 @admin.register(UserCredits)
 class UserCreditsAdmin(admin.ModelAdmin):
-    list_display = ('user', 'available_clicks', 'clicks_used', 'referral_code', 'referred_by', 'created_at')
+    list_display = ('user', 'is_premium', 'available_clicks', 'clicks_used', 'referral_code', 'referred_by', 'created_at')
+    list_filter = ('is_premium',)
     search_fields = ('user__username', 'user__email', 'referral_code')
+    # is_premium is deliberately editable — manual override/revoke independent
+    # of the PremiumEmail allowlist.
     readonly_fields = ('clicks_used', 'referral_code', 'created_at')
     inlines = [CreditGrantInline]
 
@@ -50,3 +53,15 @@ class PaymentAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     search_fields = ('user__username', 'phone_number', 'checkout_request_id', 'mpesa_receipt_number')
     readonly_fields = ('checkout_request_id', 'merchant_request_id', 'raw_callback', 'created_at', 'updated_at')
+
+
+@admin.register(PremiumEmail)
+class PremiumEmailAdmin(admin.ModelAdmin):
+    """
+    Add an email here → that user (existing or future) gets unlimited
+    clicks automatically. See signals.py: grant_premium_to_existing_user
+    (flips an existing account immediately) and grant_welcome_credits
+    (flips a new signup at registration time).
+    """
+    list_display = ('email', 'created_at')
+    search_fields = ('email',)

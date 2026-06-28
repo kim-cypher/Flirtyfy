@@ -6,6 +6,7 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import Chat from './components/Chat';
 import Subscribe from './components/Subscribe';
+import Account from './components/Account';
 import './App.css';
 
 /**
@@ -46,10 +47,16 @@ function App() {
             element={isAuthenticated ? <Chat /> : <Navigate to="/login" />} 
           />
           
-          {/* Dashboard - user profile and settings */}
+          {/* Dashboard - AI preview + CTA */}
           <Route
             path="/dashboard"
             element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
+          />
+
+          {/* Account - profile, plan, subscribe, referral */}
+          <Route
+            path="/account"
+            element={isAuthenticated ? <Account /> : <Navigate to="/login" />}
           />
 
           {/* Subscribe - top up clicks via M-Pesa */}

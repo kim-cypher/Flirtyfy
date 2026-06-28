@@ -9,9 +9,7 @@
   width: 100%;
   min-height: 100vh;
   background: #000;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
 /* Header */
@@ -86,7 +84,7 @@
   padding: 8px 16px;
   background-color: #2a2a4a;
   border: 1px solid #4a4a6a;
-  border-radius: 6px;
+  border-radius: 999px;
   color: #999;
   font-size: 12px;
   font-weight: 600;
@@ -117,6 +115,14 @@
   box-shadow: 0 0 10px rgba(108, 79, 201, 0.2);
 }
 
+.credits-badge--premium {
+  background: linear-gradient(135deg, #2a2010, #3a2a10);
+  border-color: #d4af37;
+  color: #f0d080;
+  cursor: default;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.25);
+}
+
 .credits-badge:hover {
   background: #22224a;
   box-shadow: 0 0 14px rgba(108, 79, 201, 0.4);
@@ -133,7 +139,7 @@
   padding: 8px 16px;
   background: linear-gradient(135deg, #ff6b6b, #ff8787);
   border: none;
-  border-radius: 6px;
+  border-radius: 999px;
   color: #fff;
   font-size: 12px;
   font-weight: 600;

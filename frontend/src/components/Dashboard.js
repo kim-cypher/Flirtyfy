@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../redux/actions/authActions';
-import { getCredits } from '../services/creditsAPI';
 import './Dashboard.css';
 
 const MESSAGES = [
@@ -25,21 +24,6 @@ function Dashboard() {
   const [charIndex, setCharIndex] = useState(0);
   const [phase, setPhase] = useState('typing');
   const [visible, setVisible] = useState(true);
-
-  const [credits, setCredits] = useState(null);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    getCredits().then((data) => { if (data.success) setCredits(data); }).catch(() => {});
-  }, []);
-
-  const handleCopyLink = () => {
-    if (!credits?.referral_link) return;
-    navigator.clipboard.writeText(credits.referral_link).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
 
   useEffect(() => {
     const msg = MESSAGES[msgIndex];
@@ -83,48 +67,26 @@ function Dashboard() {
         <span className="db-logo">Flirtyfy</span>
         <div className="db-nav-right">
           {user?.username && <span className="db-welcome">{user.username}</span>}
-          <button className="db-logout" onClick={handleLogout}>Logout</button>
+          <button className="db-account-link" onClick={() => navigate('/account')} type="button">Account</button>
+          <button className="db-logout" onClick={handleLogout} type="button">Logout</button>
         </div>
       </nav>
 
       <main className="db-stage">
-        <p className="db-label">AI · Live Preview</p>
+        <div className="db-stage-left">
+          <p className="db-label">AI · Live Preview</p>
 
-        <div className={`db-bubble ${visible ? 'db-bubble--visible' : 'db-bubble--hidden'}`}>
-          <span className="db-text">{displayText}</span>
-          <span className={`db-cursor ${phase === 'typing' ? 'db-cursor--on' : ''}`}>|</span>
+          <div className={`db-bubble ${visible ? 'db-bubble--visible' : 'db-bubble--hidden'}`}>
+            <span className="db-text">{displayText}</span>
+            <span className={`db-cursor ${phase === 'typing' ? 'db-cursor--on' : ''}`}>|</span>
+          </div>
         </div>
 
-        <button className="db-cta" onClick={handleGetStarted}>
-          Make it yours <span className="db-arrow">→</span>
-        </button>
-
-        {credits && (
-          <div className="db-referral-card">
-            <p className="db-referral-clicks">
-              ⚡ <strong>{credits.available_clicks}</strong> click{credits.available_clicks === 1 ? '' : 's'} available
-            </p>
-            <p className="db-referral-title">Refer a friend, earn 30 free clicks</p>
-            <p className="db-referral-desc">
-              Free for 7 days from the moment they join. Share your link below.
-            </p>
-            <div className="db-referral-link-row">
-              <input
-                className="db-referral-input"
-                type="text"
-                readOnly
-                value={credits.referral_link}
-                onFocus={(e) => e.target.select()}
-              />
-              <button type="button" className="db-referral-copy" onClick={handleCopyLink}>
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <button type="button" className="db-referral-topup" onClick={() => navigate('/subscribe')}>
-              Or top up — ${credits.subscription_price_usd} for {credits.subscription_clicks} clicks
-            </button>
-          </div>
-        )}
+        <div className="db-stage-right">
+          <button className="db-cta" onClick={handleGetStarted}>
+            Make it yours <span className="db-arrow">→</span>
+          </button>
+        </div>
       </main>
     </div>
   );

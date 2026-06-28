@@ -23,6 +23,12 @@
   scrollbar-color: #3a3a5a transparent;
 }
 
+/* The buttons screen — black & white only, no purple. Left side (paste/output)
+   is intentionally untouched. */
+.interface-right {
+  background: #000000;
+}
+
 .interface-side::-webkit-scrollbar { width: 5px; }
 .interface-side::-webkit-scrollbar-track { background: transparent; }
 .interface-side::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
@@ -47,6 +53,53 @@
 .output-wrapper {
   flex-shrink: 0;
   margin-top: auto;
+}
+
+/* Right side's response box reuses OutputArea's shared CSS classes (same
+   component as the left side) — these overrides strip the purple from just
+   this side's instance, leaving the left side's output untouched. */
+.interface-right .output-area {
+  border-color: #2a2a2a;
+  background: #0a0a0a;
+}
+
+.interface-right .output-loading {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.interface-right .output-spinner {
+  border-color: rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+}
+
+.interface-right .output-loading-text {
+  color: #cccccc;
+}
+
+.interface-right .output-ready {
+  border-color: #333333;
+  background: linear-gradient(160deg, #0a0a0a 0%, #161616 100%);
+}
+
+.interface-right .output-reply-text {
+  color: #ffffff;
+}
+
+.interface-right .output-footer {
+  border-top-color: #2a2a2a;
+}
+
+.interface-right .btn-copy {
+  background: #1a1a1a;
+  border-color: #333333;
+  color: #cccccc;
+}
+
+.interface-right .btn-copy:hover {
+  background: #262626;
+  border-color: #ffffff;
+  color: #ffffff;
 }
 
 /* Mobile */

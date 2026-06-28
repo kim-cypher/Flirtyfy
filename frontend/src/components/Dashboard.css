@@ -57,16 +57,44 @@
   color: rgba(240, 236, 230, 0.7);
 }
 
-/* ── Stage ───────────────────────────────────────────────────────────────── */
+.db-account-link {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: rgba(240, 236, 230, 0.3);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.db-account-link:hover {
+  color: rgba(240, 236, 230, 0.7);
+}
+
+/* ── Stage — two columns: AI preview (left), CTA (right) ───────────────────── */
 
 .db-stage {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
+  gap: 64px;
   padding: 100px 32px 80px;
   min-height: 100vh;
+}
+
+.db-stage-left {
+  flex: 1;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+}
+
+.db-stage-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 /* ── Label ───────────────────────────────────────────────────────────────── */
@@ -162,95 +190,21 @@
   transition: transform 0.2s ease;
 }
 
-/* ── Referral card ───────────────────────────────────────────────────────── */
-
-.db-referral-card {
-  margin-top: 44px;
-  padding: 22px 26px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  max-width: 420px;
-  text-align: left;
-}
-
-.db-referral-clicks {
-  margin: 0 0 12px 0;
-  font-size: 13px;
-  color: #cfc8c2;
-}
-
-.db-referral-clicks strong {
-  color: #f0ece6;
-}
-
-.db-referral-title {
-  margin: 0 0 4px 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #f0ece6;
-}
-
-.db-referral-desc {
-  margin: 0 0 14px 0;
-  font-size: 12.5px;
-  color: #8a8480;
-  line-height: 1.5;
-}
-
-.db-referral-link-row {
-  display: flex;
-  gap: 8px;
-}
-
-.db-referral-input {
-  flex: 1;
-  padding: 10px 12px;
-  background: #0b080c;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: #cfc8c2;
-  font-size: 12.5px;
-}
-
-.db-referral-copy {
-  padding: 10px 16px;
-  background: #f0ece6;
-  color: #0b080c;
-  border: none;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.db-referral-copy:hover {
-  background: #ffffff;
-}
-
-.db-referral-topup {
-  display: block;
-  margin-top: 14px;
-  padding: 0;
-  background: none;
-  border: none;
-  color: #b8a8e8;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.db-referral-topup:hover {
-  color: #d8ccf8;
-}
-
 .db-cta:hover .db-arrow {
   transform: translateX(4px);
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
+/* ── Responsive — stack the two columns on narrower screens ─────────────────── */
+
+@media (max-width: 900px) {
+  .db-stage {
+    flex-direction: column;
+    gap: 40px;
+    padding: 90px 24px 60px;
+  }
+
+  .db-stage-left { max-width: 100%; }
+}
 
 @media (max-width: 768px) {
   .db-nav { padding: 18px 24px; }

@@ -59,11 +59,15 @@ function Chat() {
   const [checkInSlot, setCheckInSlot] = useState(null); // non-null while the modal is shown
 
   const [availableClicks, setAvailableClicks] = useState(null);
+  const [isPremium, setIsPremium] = useState(false);
 
   const refreshCredits = useCallback(async () => {
     try {
       const data = await getCredits();
-      if (data.success) setAvailableClicks(data.available_clicks);
+      if (data.success) {
+        setAvailableClicks(data.available_clicks);
+        setIsPremium(data.is_premium);
+      }
     } catch (err) {
       // Silent — a failed poll shouldn't disrupt the UI.
     }
@@ -131,19 +135,28 @@ function Chat() {
           <FlirtyfyLogo size={34} textSize={24} />
         </div>
         <div className="header-right">
-          {availableClicks !== null && (
-            <button
-              className="credits-badge"
-              onClick={() => navigate('/subscribe')}
-              title="Click to top up"
-              type="button"
-            >
-              ⚡ {availableClicks} click{availableClicks === 1 ? '' : 's'}
-            </button>
+          {isPremium ? (
+            <span className="credits-badge credits-badge--premium" title="Unlimited clicks">
+              ⭐ Premium
+            </span>
+          ) : (
+            availableClicks !== null && (
+              <button
+                className="credits-badge"
+                onClick={() => navigate('/subscribe')}
+                title="Click to top up"
+                type="button"
+              >
+                ⚡ {availableClicks} click{availableClicks === 1 ? '' : 's'}
+              </button>
+            )
           )}
           <NotificationBell />
           <button className="btn-nav" onClick={handleGoHome} title="Go to Dashboard">
             Home
+          </button>
+          <button className="btn-nav" onClick={() => navigate('/account')} title="Go to Account">
+            Account
           </button>
           {user && <span className="user-name">{user.username}</span>}
           <button className="btn-logout" onClick={handleLogout} title="Logout">

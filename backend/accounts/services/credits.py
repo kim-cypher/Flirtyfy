@@ -62,8 +62,12 @@ def gate_check(user) -> bool:
     is exactly when they need to hear about it, and this is the only path
     that runs when they're already at zero (try_consume_click is never
     reached in that case, since the view returns immediately on a False gate).
+
+    Premium accounts always pass — never gated, never notified.
     """
     credits = get_or_create_credits(user)
+    if credits.is_premium:
+        return True
     available = credits.available_clicks()
     if available <= 0:
         _notify_out_of_clicks_once(user, credits)
@@ -97,12 +101,17 @@ def try_consume_click(user) -> bool:
     Atomically deducts one click if available. Returns True if consumed,
     False if the user has none left. Call this only after a generation has
     already succeeded — never deduct for a request that errored.
+
+    Premium accounts always succeed and are never deducted — clicks_used
+    stays untouched, so there's nothing to ever run out of.
     """
     from accounts.models import UserCredits
     with transaction.atomic():
         credits = UserCredits.objects.select_for_update().get_or_create(
             user=user, defaults={'referral_code': generate_referral_code()}
         )[0]
+        if credits.is_premium:
+            return True
         available = credits.available_clicks()
         if available <= 0:
             _notify_out_of_clicks_once(user, credits)

@@ -46,7 +46,9 @@ function Register() {
     <div className="auth-root">
       <div className="auth-brand">
         <div className="auth-brand-inner">
-          <div className="auth-brand-logomark">F</div>
+          <div className="auth-brand-logomark">
+            <FlirtyfyLogo size={44} textSize={30} />
+          </div>
           <h2 className="auth-brand-headline">
             Join the<br />
             <span className="auth-brand-accent">conversation.</span>

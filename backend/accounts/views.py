@@ -374,6 +374,7 @@ class CreditsView(APIView):
         origin = request.build_absolute_uri('/').rstrip('/')
         return Response({
             'success': True,
+            'is_premium': credits.is_premium,
             'available_clicks': credits.available_clicks(),
             'referral_code': credits.referral_code,
             'referral_link': f"{origin}/register?ref={credits.referral_code}",
