@@ -66,10 +66,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
-    'pgvector.django',
     'accounts',
 ]
 
@@ -244,12 +244,23 @@ CELERY_BEAT_SCHEDULE = {
 # Django Celery Results
 INSTALLED_APPS += ['django_celery_results']
 
-# API Configuration
-OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+# API Configuration — Anthropic only (OpenAI dependency removed; similarity
+# checks now run on Postgres pg_trgm, see accounts/services/dedup.py)
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 
 if not ANTHROPIC_API_KEY:
     print("⚠️ WARNING: ANTHROPIC_API_KEY not set in environment variables")
+
+# Generation model: Sonnet 5 for the user-facing replies (better instruction
+# following / register matching), Haiku for cheap internal rewrites.
+# NOTE: claude-sonnet-5 rejects non-default temperature/top_p — never pass them.
+ANTHROPIC_GENERATION_MODEL = env("ANTHROPIC_GENERATION_MODEL", default="claude-sonnet-5")
+ANTHROPIC_REWRITE_MODEL = env("ANTHROPIC_REWRITE_MODEL", default="claude-haiku-4-5")
+
+# Persona timezone — the target audience is US-based, so the persona "lives"
+# in New York regardless of server location. The frontend time chips override
+# the slot per request; this only anchors day-of-week and the fallback slot.
+FLIRTYFY_TIMEZONE = env("FLIRTYFY_TIMEZONE", default="America/New_York")
 
 # M-Pesa Daraja API — see accounts/services/mpesa_service.py for the full
 # contract. Blank by default; payments cannot work until real credentials

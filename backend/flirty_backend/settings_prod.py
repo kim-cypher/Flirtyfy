@@ -235,15 +235,10 @@ RESPONSE_MIN_CHARS = 140
 RESPONSE_MAX_CHARS = 180
 MAX_REPHRASE_ATTEMPTS = 3
 
-# Uniqueness thresholds (very strict for production)
-SEMANTIC_SIMILARITY_THRESHOLD = 0.95
-LEXICAL_SIMILARITY_THRESHOLD = 0.95
-
-# GPT-4 configuration
-OPENAI_MODEL = 'gpt-4'
-OPENAI_TEMPERATURE_BASE = 0.85
-OPENAI_MAX_RETRIES = 3
-OPENAI_REQUEST_TIMEOUT = 30
+# NOTE: legacy OpenAI/GPT-4 config removed — the app is Anthropic-only.
+# Generation/rewrite model IDs are inherited from base settings
+# (ANTHROPIC_GENERATION_MODEL / ANTHROPIC_REWRITE_MODEL); similarity
+# thresholds live in accounts/services/dedup.py next to the code they tune.
 
 # Rate limits per endpoint (per user, per minute)
 UPLOAD_RATE_LIMIT_PER_MINUTE = 1
