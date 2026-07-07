@@ -206,6 +206,24 @@ class GenerateSpecificResponseView(APIView):
             except Exception:
                 pass
 
+            # Same-conversation guarantee: if this exact conversation was
+            # uploaded before (user clicked generate again), every reply we
+            # already gave for it goes to the FRONT of the avoid list, so the
+            # model is steered away proactively (the dedup layers remain the
+            # enforcement backstop). Pure DB lookup — zero LLM cost.
+            conv_fp = _response_fingerprint(conversation)
+            try:
+                _same_convo = list(
+                    AIReply.objects
+                    .filter(user=request.user, conversation_fingerprint=conv_fp)
+                    .exclude(delivered_text='')
+                    .order_by('-created_at')
+                    .values_list('delivered_text', flat=True)[:4]
+                )
+                _recent_replies = (_same_convo + [r for r in _recent_replies if r not in _same_convo])[:5]
+            except Exception:
+                pass
+
             # Generate response (one LLM call)
             response_result = generate_context_aware_response(
                 conversation, intent_data, _recent_replies, time_slot=time_slot, user_id=request.user.id
@@ -246,13 +264,11 @@ class GenerateSpecificResponseView(APIView):
                     conversation_context=conversation,
                     intent_type='specific',
                     button_intent=None,
+                    delivered_text=response_text,
+                    conversation_fingerprint=conv_fp,
                 )
-                # Layer 3: generate embedding in background (no latency impact)
-                try:
-                    from .tasks import generate_and_store_embedding
-                    generate_and_store_embedding.delay(reply.id)
-                except Exception:
-                    pass  # Celery unavailable in dev — skip silently
+                # Near-duplicate detection is synchronous now (pg_trgm in
+                # dedup.dedupe_similar) — no background embedding task needed.
             except Exception as db_error:
                 logger.error(f"DB save error (specific): {db_error}")
 
@@ -361,13 +377,10 @@ class GenerateButtonResponseView(APIView):
                     conversation_context=None,
                     intent_type='button',
                     button_intent=button_intent,
+                    delivered_text=response_text,
                 )
-                # Layer 3: generate embedding in background (no latency impact)
-                try:
-                    from .tasks import generate_and_store_embedding
-                    generate_and_store_embedding.delay(reply.id)
-                except Exception:
-                    pass  # Celery unavailable in dev — skip silently
+                # Near-duplicate detection is synchronous now (pg_trgm in
+                # dedup.dedupe_similar) — no background embedding task needed.
             except Exception as db_error:
                 logger.error(f"DB save error (button): {db_error}")
 
