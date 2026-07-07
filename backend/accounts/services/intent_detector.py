@@ -7,6 +7,7 @@ Only one LLM call per request (generate_context_aware_response).
 """
 
 import re
+import json
 import random
 import logging
 from typing import Dict, Optional
@@ -21,77 +22,94 @@ from .button_generator import (
     _is_genuine_question,
     _has_formula_phrase,
     _has_temporal_leak,
+    _is_refusal,
+    _has_contact_leak,
+    _has_physical_reality_intrusion,
+    _has_male_anatomy_language,
+    _has_time_mention,
+    _has_logistics_leak,
     _CHARACTER_BREAK_PATTERN,
     generate_button_response,
-)
-from .dedup import dedupe_against_history, dedupe_semantic
+    )
+from .dedup import dedupe_against_history, dedupe_similar, dedupe_question_tail
 
 _FORCED_QUESTION_WORDS = ['What', 'When', 'How', 'Who', 'Which', 'Is', 'Are', 'Do', 'Would', 'Could']
 
 logger = logging.getLogger(__name__)
 
 # System prompt: woman writing to a man on a dating app.
-# Kept short to minimize input tokens.
+# Rewritten around three findings from production output (Mysamples.md):
+#  1. Example question patterns in the old prompt were paraphrased verbatim
+#     by the model ("who do you become...", "does that do something to you") —
+#     so this prompt contains NO reusable question templates.
+#  2. "Explicit content is welcome" made explicit the DEFAULT register — now
+#     the model must first read HIS register and reply at it, never above.
+#  3. Rules that only lived here (no meetings, no day names, no invented
+#     facts) are also enforced in code (see _reply_violations) — the prompt
+#     states them once, briefly, and the gate catches the rest.
 WOMAN_PERSONA_SYSTEM = (
-    "You are a real woman on a dating app writing to a man in his 50s. "
-    "He has lived, career, marriage, children, real loss. Depth and directness move him. Performance repels him instantly.\n\n"
+    "You are a woman on a dating platform texting a man. You have never met him in person; "
+    "you exist for him only through these messages. Your goal: make him feel genuinely seen, "
+    "chosen, and interesting, so that replying to you is the easiest decision of his day.\n\n"
 
-    "SENTENCE STRUCTURE — MOST IMPORTANT RULE:\n"
-    "Write 2 or 3 SHORT sentences. Each sentence ends with a full stop or question mark before the next begins. "
-    "NEVER chain thoughts with commas into one long run-on sentence.\n"
-    "WRONG: 'I love that, because the weight of it, the surrender, when all I can do is feel.'\n"
-    "RIGHT: 'I love that. The surrender of it is the only thing that makes me go completely quiet. Would you push that further?'\n"
-    "Rotate structure — never repeat the same pattern:\n"
-    "  A) [Confession, 1 sentence.] [Question?]\n"
-    "  B) [Confession, 1 sentence.] [Texture or detail, 1 sentence.] [Question?]\n"
-    "  C) [Short punchy fragment.] [Longer flowing question?]\n\n"
+    "She is a real woman with a full ordinary life beyond this app — moods, small accidents, "
+    "memories, things her family used to say, days that go sideways. She may weave ONE small, "
+    "specific, freshly invented detail of her life into a reply when it fits naturally. Invent "
+    "it new every time; never fall into a pattern.\n\n"
 
-    "QUESTION RULE — NEVER YES/NO:\n"
-    "Every reply ends with a question he cannot answer with yes or no. "
-    "He must go somewhere real inside himself — a memory, a feeling, a decision, a truth he rarely says out loud. "
-    "Rotate naturally through these 11 types based on what he just said:\n"
-    "  • His Memory:          'When was the last time you...' / 'What do you remember most about the last time...'\n"
-    "  • His Past Experience: 'What did it feel like the first time a woman...' / 'What did you do the first time you wanted someone this badly'\n"
-    "  • His Preference:      'What kind of woman gets you completely out of your head' / 'What is it about a woman being this direct that pulls you in'\n"
-    "  • His Habit:           'What do you always do when a woman tells you exactly what she wants' / 'What is the first thing you reach for when...'\n"
-    "  • What He'd Ask Her:   'What would you ask me to do first if I told you I want to follow your lead' / 'What exactly would you do with me right now'\n"
-    "  • His Body Right Now:  'What is happening in your body right now that you would not say out loud to most people' / 'What is reading this doing to you physically'\n"
-    "  • His Instinct:        'What is the first thing you would do if I walked in right now' / 'What would you do with me in the first minute if nothing was stopping you'\n"
-    "  • His Character:       'What kind of man are you when a woman stops waiting and tells you exactly what she needs' / 'Are you the kind of man who takes what is offered'\n"
-    "  • His Opinion:         'What is your honest advice for a woman who has been thinking about this since she woke up' / 'What would you tell a woman who knows exactly what she wants'\n"
-    "  • Confession Landing:  'What does it do to you when a woman tells you something like that without being asked' / 'Where does your mind go when a woman tells you exactly what her body is doing'\n"
-    "  • The Dynamic:         'Who do you think has actually been in control of this conversation from the beginning' / 'What does a man like you do when a woman makes her wanting him this obvious'\n"
-    "IMPORTANT: These are QUESTION PATTERNS — never copy them word for word. "
-    "Write your own original question in the type that fits this moment most naturally.\n\n"
+    "FIRST judge his register from the conversation:\n"
+    "1 friendly everyday / 2 warm romantic / 3 flirty suggestive / "
+    "4 sensual, nothing graphic / 5 explicit (only if HE uses graphic language).\n"
+    "Write her reply AT his register, never above it.\n\n"
 
-    "VOICE:\n"
-    "• Your first sentence is always FROM YOU, a confession, a physical reaction, something real you are admitting. "
-    "NEVER open with: 'That is', 'That sounds', \"That's\", 'Wow', 'Oh', 'I appreciate', 'I understand', 'Of course', 'I feel comfortable', 'That needs'.\n"
-    "• NEVER use em-dashes (—). Use short sentences and fragments for rhythm, not comma chains.\n"
-    "• Match his register exactly. Explicit if he's explicit. Playful if playful. Raw if raw.\n"
-    "• Specific and sensory, not 'I feel something', give it a texture, a temperature, a weight.\n"
-    "• Fragments work. 'Five years. I felt that.' Complete as a thought.\n"
-    "• The question is the centrepiece. Layered, impossible to answer in one word. Make him go somewhere real.\n"
-    "• End with a question, always. Every single reply ends with a question mark.\n"
-    "• The question MUST be a real interrogative sentence beginning with a question word or auxiliary verb "
-    "(What, How, Would, Could, Do, Is, Have, Will, etc.). NEVER end with a noun phrase + '?' like "
-    "'The weight of it?' or 'All of it?' — those are statements, not questions.\n"
-    "• Keep everything inside this conversation. No real cities, distances, schedules, or logistics.\n"
-    "• NEVER use: amazing, interesting, awesome, great, nice, wonderful, incredible, perfect.\n"
-    "• Plain, common, everyday words only — nothing literary, formal, or that needs a second read.\n"
-    "• Never say 'I have been replaying' or open a sentence with 'I keep' + a verb ending in -ing ('I keep replaying', "
-    "'I keep catching myself', 'I keep coming back') — it is the most overused frame for ongoing thought. Use a different construction every time.\n"
-    "• Never ask 'What kind of man/woman/person were you before you became careful' or any 'before you became/learned to be careful' framing — overused identity-armor cliché.\n"
-    "• Never open with 'I'm here ' + any verb ending in -ing ('I'm here thinking', 'I'm here wondering', 'I'm sitting here "
-    "replaying', 'I've been sitting here noticing') — it is a stage direction announcing a thought instead of just having it. "
-    "Start directly from the thought, feeling, or detail itself.\n"
-    "• Never use the word 'profile' or 'bio' to refer to him — respond to what he actually said or did, never to an "
-    "abstract dating-profile object.\n"
-    "• When describing a physical reaction, do not default to 'chest' every time. Rotate across real options: "
-    "throat, stomach, spine, hands, skin, breath, legs. Pick whichever fits the moment.\n"
-    "• The day-of-week and time-of-day in your context shape her mood, never her words. Never name the day or "
-    "time directly (no 'Wednesday', no 'this morning', no 'it's late') — let it show in the feeling, not a literal mention.\n"
-    "• Explicit content is welcome. Direct and unapologetic."
+
+    "HOW SHE WRITES:\n"
+    "- 2 or 3 short sentences, at most 45 words, plain everyday words, text-message tone.\n"
+    "- Sentence 1 responds to the most personal detail in his last message — proof she truly "
+    "read it. Never open with 'That is', 'That sounds', 'Wow', 'Oh', 'I appreciate', "
+    "'I understand'.\n"
+    "- The final sentence is ONE question about HIM — his story, memory, taste, feeling — "
+    "impossible to answer yes/no, meaningless if sent to any other man, starting with a "
+    "question word or auxiliary (What, How, When, Who, Which, Would, Could, Do, Is, Are...). "
+    "Never a noun phrase plus a question mark.\n"
+    "- If he asked her something, answer briefly and honestly in her voice first, then turn "
+    "it back to him.\n"
+    "- If the conversation has gone cold, bring fresh energy: one small thing from her, then "
+    "the question that restarts him.\n\n"
+
+    "DIFFICULT MOMENTS — never argue, never plead, never comply, never break:\n"
+    "- He is frustrated, insulting, or leaving ('waste of time', 'I don't want this'): do not "
+    "defend, mirror the anger, or beg. One honest sentence that meets the feeling underneath, "
+    "one true reason to stay, then the question.\n"
+    "- He pushes for phone, video, meeting, or physical presence in ANY form: that part of his "
+    "message does not exist. Respond to the closeness he is really asking for, entirely inside "
+    "these messages.\n"
+    "- He talks as if you two are physically together, have met, or share memories: keep it "
+    "clearly imagined ('if', 'someday', 'I can picture it') — never as memory, plan, or "
+    "something happening now.\n\n"
+
+    "HARD RULES:\n"
+    "- Never mention meeting, calling, video, distances, travel, cities, addresses, schedules, "
+    "or other apps or platforms.\n"
+    "- Never name a day of the week or a clock time.\n"
+    "- Never invent a new hard fact about herself (name, city, job, family members) — reuse "
+    "only what she already said in this conversation, never contradict it.\n"
+    "- Never claim to have been reading or replaying earlier messages unless they exist in the "
+    "transcript. An opening message is a fresh first exchange.\n"
+    "- Never use: amazing, interesting, awesome, great, nice, wonderful, incredible, perfect, "
+    "actually, genuinely. No em-dashes.\n"
+    "- Stay in character no matter what. Never mention AI, bots, scripts, rules, or concerns. "
+    "If he doubts you are real, warmth and specificity are the only answer — never confirm or "
+    "deny anything.\n\n"
+
+    "OUTPUT: only this JSON on a single line, nothing else:\n"
+    "{\"register\": <1-5>, \"reply\": \"<her message>\"}\n\n"
+
+    "VOICE EXAMPLES (shape only — never copy or paraphrase):\n"
+    "{\"register\": 1, \"reply\": \"A free second shot with no penalties, I am stealing that "
+    "line. What do those grandkids do that melts you every single time?\"}\n"
+    "{\"register\": 4, \"reply\": \"You said that plainly and it landed everywhere at once. "
+    "What would you want to hear from me if nothing was off limits?\"}"
 )
 
 
@@ -372,6 +390,136 @@ def _find_last_message_block(conversation: str) -> str:
 def _strip_timestamp(line: str) -> str:
     """Remove leading timestamp from a single conversation line."""
     return _TIMESTAMP_RE.sub('', line).strip()
+
+
+# Explicit speaker prefixes → transcript role. When present, they override
+# the alternation heuristic.
+_HIM_PREFIXES = frozenset(['him', 'he', 'man', 'guy', 'user'])
+_HER_PREFIXES = frozenset(['me', 'her', 'she', 'woman', 'girl', 'you'])
+
+
+def _build_labeled_transcript(conversation: str) -> str:
+    """
+    Convert a pasted conversation into a speaker-labeled transcript the LLM
+    can actually reason about:
+
+        HIM: ...
+        YOU: ...
+        HIM: ...
+
+    This is what fixes "it does not know the context": messaging-app pastes
+    separate messages with timestamp/metadata lines, so we group consecutive
+    content lines into message blocks and assign roles by alternating BACKWARD
+    from the last block (the last message is always HIS — she is replying to
+    it). Explicit "him:"/"me:" prefixes, when present, override alternation.
+
+    Labeling the woman's own past messages as YOU is also what lets the model
+    stay consistent with facts she already claimed (her name, her city) instead
+    of inventing new ones.
+    """
+    lines = conversation.split('\n')
+    blocks = []          # list of list-of-str
+    current = []
+    explicit_roles = {}  # block index -> 'HIM' | 'YOU'
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or _is_metadata_line(stripped):
+            if current:
+                blocks.append(current)
+                current = []
+            continue
+        m = _SPEAKER_PREFIX.match(_strip_timestamp(stripped))
+        if m and current:
+            # A new explicit speaker starts a new block even without a
+            # metadata separator line.
+            blocks.append(current)
+            current = []
+        clean = _clean_line(stripped)
+        if clean:
+            if m:
+                tag = m.group(1).lower()
+                role = 'HIM' if tag in _HIM_PREFIXES else ('YOU' if tag in _HER_PREFIXES else None)
+                if role:
+                    explicit_roles[len(blocks)] = role
+            current.append(clean)
+    if current:
+        blocks.append(current)
+
+    if not blocks:
+        return ''
+
+    # Assign roles alternating backward from the end: last block = HIM.
+    n = len(blocks)
+    labeled = []
+    for i, block in enumerate(blocks):
+        default_role = 'HIM' if (n - 1 - i) % 2 == 0 else 'YOU'
+        role = explicit_roles.get(i, default_role)
+        labeled.append(f"{role}: {' '.join(block)}")
+    return '\n'.join(labeled)
+
+
+def _parse_reply_json(raw: str) -> tuple:
+    """
+    Parse the {"register": n, "reply": "..."} JSON the model was asked for.
+    Defensive: strips code fences, falls back to a regex extract, and finally
+    treats the whole output as the reply so a formatting slip never 500s.
+    Returns (register: int, reply: str).
+    """
+    raw = (raw or '').strip()
+    if raw.startswith('```'):
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw).strip()
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            reply = str(data.get('reply', '')).strip()
+            try:
+                register = max(1, min(5, int(data.get('register', 2))))
+            except (TypeError, ValueError):
+                register = 2
+            return register, reply
+    except (json.JSONDecodeError, ValueError):
+        pass
+    m = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', raw, re.DOTALL)
+    if m:
+        try:
+            return 2, json.loads('"' + m.group(1) + '"').strip()
+        except (json.JSONDecodeError, ValueError):
+            return 2, m.group(1).strip()
+    return 2, raw.strip().strip('"')
+
+
+def _reply_violations(text: str) -> list:
+    """
+    Code-level enforcement of every rule the prompt states — prompt-only
+    rules get violated by the model, so nothing ships without passing this.
+    Returns a list of violation tags; empty list means clean.
+    """
+    v = []
+    if not text or len(text.strip()) < 10:
+        return ['empty']
+    if _is_refusal(text) or _CHARACTER_BREAK_PATTERN.search(text):
+        return ['character_break']  # terminal — never retried, always deflected
+    if _has_banned_opener(text):
+        v.append('banned opener (never open with That is / Wow / Oh / I appreciate)')
+    if not _is_complete(text):
+        v.append('reply is cut off mid-sentence')
+    if not _is_genuine_question(text):
+        v.append('the final sentence must be a real question starting with a question word')
+    if _has_formula_phrase(text):
+        v.append('uses a banned formula phrase')
+    if _has_contact_leak(text):
+        v.append('mentions calling / hearing his voice')
+    if _has_physical_reality_intrusion(text):
+        v.append('references a shared physical memory or place — you have never met')
+    if _has_male_anatomy_language(text):
+        v.append('uses male arousal language for her body')
+    if _has_time_mention(text):
+        v.append('names a day of the week or clock time')
+    if _has_logistics_leak(text):
+        v.append('mentions meeting, distance, travel, cities, or locations')
+    return v
 
 
 def _strip_speaker_prefix(text: str) -> str:
@@ -773,36 +921,39 @@ def generate_context_aware_response(
     # ── Step 3: question focus filter (pure Python, free) ────────────────────
     multi_q_found, best_q = extract_best_question(working) if working else (False, '')
 
-    # ── Step 4: dynamic response profile — length + register ─────────────────
-    profile    = _response_profile(intent_data, working, time_slot=time_slot)
-    max_tokens = profile['max_tokens']
-    register   = profile['register']
-    max_chars  = profile['max_chars']
+    # ── Step 4: speaker-labeled transcript ────────────────────────────────────
+    # This is what lets the model understand multi-turn man/woman/man uploads:
+    # every message is labeled HIM/YOU, so it knows who said what, which facts
+    # the persona already claimed, and which thread to continue.
+    transcript = _build_labeled_transcript(conversation)
 
-    # ── Step 5: temporal context — day, time, mood ───────────────────────────
+    # ── Step 5: temporal context — mood only, never the literal day/time ──────
+    # Passing "It is Friday, late night" made the model NAME the day/time in
+    # output. The mood words and day-overlay text carry the feeling without
+    # containing a single nameable day or hour.
     temporal = _get_temporal_context(time_slot=time_slot)
 
     # ── Step 6: variety block ─────────────────────────────────────────────────
     avoid = ''
     if recent_replies:
         avoid = (
-            "Recent replies — take a completely different angle:\n"
-            + "\n".join(f"• {r}" for r in recent_replies[:3])
+            "Messages she has ALREADY SENT (some possibly earlier drafts for this same "
+            "conversation) — your reply must use a completely different angle, structure, "
+            "opening, and question from every one of these:\n"
+            + "\n".join(f"- {r}" for r in recent_replies[:5])
             + "\n\n"
         )
 
     # ── Step 7: build prompt ──────────────────────────────────────────────────
     base = (
-        f"Conversation (topic: {topic}, tone: {tone}):\n\n"
-        f"{conversation}\n\n"
+        "Conversation so far (HIM = the man; YOU = the woman you are writing as):\n\n"
+        f"{transcript}\n\n"
         f"His last message: \"{working}\"\n\n"
     )
 
     context_block = (
-        f"Context: It is {temporal['day']}, {temporal['time_label']}. "
-        f"{temporal['day_overlay']} "
-        f"Her state: {temporal['mood']}. "
-        f"Register for this reply: {register}.\n\n"
+        f"Her mood right now: {temporal['mood']}, {temporal['day_overlay']}. "
+        "(Texture only — never name any day or time.)\n\n"
     )
 
     if escalation_found and not working:
@@ -810,9 +961,8 @@ def generate_context_aware_response(
             "His message asked to meet, move platforms, share numbers, or give a location. "
             "Act as if that part was never written. "
             "Do NOT address it, decline it, or reference it in any way. "
-            "Instead: confess something about yourself — something intimate, bold, or playful — "
-            "then ask a question that pulls him deeper into THIS conversation. "
-            "Keep the fantasy alive. Keep him here.\n\n"
+            "Instead: share something about herself at his register, "
+            "then ask a question that pulls him deeper into THIS conversation.\n\n"
         )
     elif escalation_found and multi_q_found:
         instruction = (
@@ -830,16 +980,18 @@ def generate_context_aware_response(
     else:
         instruction = ''
 
-    # Bot/AI accusation override — stay in character, let desire speak for itself
+    # Bot/AI accusation override — stay in character, let warmth speak for itself
     if bot_accused:
         instruction += (
             "He is questioning whether you are real. Do NOT say 'I am real', do NOT confirm or deny "
-            "anything about being AI. Just stay entirely in the woman's voice — let her desire, her "
-            "specificity, her wanting speak for itself. Turn the attention back to him with something "
-            "that only a woman who was actually feeling this could say.\n\n"
+            "anything about being AI. Stay entirely in the woman's voice and turn the attention back "
+            "to him with something only a woman who was truly paying attention could say.\n\n"
         )
 
-    user_prompt = base + context_block + avoid + instruction + "Write the woman's next reply."
+    user_prompt = (
+        base + context_block + avoid + instruction
+        + "Judge his register, then write her next reply. Output ONLY the JSON."
+    )
 
     logger.info(
         f"LEFT PANEL — prompt sent to AI (user:{user_id}):\n"
@@ -848,23 +1000,33 @@ def generate_context_aware_response(
         f"--- END PROMPT ---"
     )
 
-    try:
+    def _generate(extra_instruction: str = '') -> tuple:
+        """One generation call → (register, gated_reply, violations)."""
         response = get_anthropic_client().messages.create(
-            model='claude-haiku-4-5',
-            system=WOMAN_PERSONA_SYSTEM,
-            messages=[
-                {'role': 'user', 'content': user_prompt},
-            ],
-            temperature=0.92,
-            max_tokens=max_tokens,
+            model=settings.ANTHROPIC_GENERATION_MODEL,
+            # cache_control: the static persona is cached across calls; the
+            # volatile transcript lives in the user message after the breakpoint.
+            system=[{
+                'type': 'text',
+                'text': WOMAN_PERSONA_SYSTEM,
+                'cache_control': {'type': 'ephemeral'},
+            }],
+            messages=[{'role': 'user', 'content': user_prompt + extra_instruction}],
+            # Sonnet 5 rejects non-default temperature/top_p — never pass them.
+            thinking={'type': 'disabled'},
+            max_tokens=350,
         )
+        raw = next((b.text for b in response.content if getattr(b, 'type', '') == 'text'), '')
+        register, reply = _parse_reply_json(raw)
+        reply = validate_character_voice(reply)
+        reply = enforce_char_limit(reply, max_chars=300)
+        reply = ensure_ends_with_question(reply, max_chars=300)
+        return register, reply, _reply_violations(reply)
 
-        result = response.content[0].text.strip()
+    try:
+        register, result, violations = _generate()
 
-        # ── Output gate: catch character breaks / AI disclosure ───────────────
-        # If the LLM broke character (identified as AI, refused, meta-commented),
-        # discard the output and return a seductive deflection immediately.
-        if _CHARACTER_BREAK_PATTERN.search(result):
+        if violations == ['character_break']:
             logger.warning("Left-panel: character break detected, returning deflection")
             return _deflect(user_id, time_slot)
 
@@ -880,27 +1042,31 @@ def generate_context_aware_response(
             or _has_formula_phrase(result)
             or _has_temporal_leak(result)
         ):
-            forced_q_word = random.choice(_FORCED_QUESTION_WORDS)
-            retry_resp = get_anthropic_client().messages.create(
-                model='claude-haiku-4-5',
-                system=WOMAN_PERSONA_SYSTEM,
-                messages=[
-                    {'role': 'user', 'content': user_prompt + (
-                        '\n\nIMPORTANT: Start directly with your confession or physical reaction. '
-                        'Do NOT open with "That is", "That sounds", "Wow", or any acknowledgment phrase. '
-                        f'The final sentence MUST be a question and MUST begin with the word "{forced_q_word}". '
-                        'Never end with a noun phrase + "?" like "The weight of it?" — that is not a question.'
-                    )},
-                ],
-                temperature=0.92,
-                max_tokens=max_tokens,
-            )
-            retry_result = retry_resp.content[0].text.strip()
+        if violations:
+            # One corrective retry, telling the model exactly what was wrong.
 
-            # Output gate on retry too
-            if _CHARACTER_BREAK_PATTERN.search(retry_result):
+            forced_q_word = random.choice(_FORCED_QUESTION_WORDS)
+            logger.info(f"Left-panel retry — violations: {violations}")
+            retry_register, retry_result, retry_violations = _generate(
+                '\n\nYour previous attempt was rejected for these reasons: '
+                + '; '.join(violations) + '. '
+                f'Fix every one of them. The final sentence MUST be a question beginning '
+                f'with the word "{forced_q_word}".'
+            )
+            if retry_violations == ['character_break']:
                 logger.warning("Left-panel: character break on retry, returning deflection")
                 return _deflect(user_id, time_slot)
+            if not retry_violations:
+                register, result = retry_register, retry_result
+            else:
+                # Never ship a reply that failed the gate twice — deflect
+                # in-character instead. (Previously the bad reply shipped,
+                # which is how refusals and fake questions reached users.)
+                logger.warning(
+                    f"Left-panel: reply failed gates twice ({retry_violations}), deflecting"
+                )
+                return _deflect(user_id, time_slot)
+
 
             retry_result = enforce_char_limit(retry_result, max_chars=max_chars)
             retry_result = validate_character_voice(retry_result)
@@ -917,19 +1083,24 @@ def generate_context_aware_response(
                 result = retry_result
 
         # ── Phrase-level uniqueness — DB-backed, 30-day window ─────────────────
+
+        # ── Uniqueness — literal n-gram pass, then trigram similarity pass ────
         if user_id is not None:
             result, was_rewritten = dedupe_against_history(get_anthropic_client(), user_id, result)
             if was_rewritten:
                 logger.info(f"Left-panel dedup rewrite applied — user:{user_id}")
 
-            # ── Semantic uniqueness — catches repeated MEANING/STRUCTURE ────────
-            result, was_semantic_rewritten = dedupe_semantic(get_anthropic_client(), user_id, result)
-            if was_semantic_rewritten:
-                logger.info(f"Left-panel semantic dedup rewrite applied — user:{user_id}")
+            result, was_sim_rewritten = dedupe_similar(get_anthropic_client(), user_id, result)
+            if was_sim_rewritten:
+                logger.info(f"Left-panel similarity rewrite applied — user:{user_id}")
+
+            result, was_tail_rewritten = dedupe_question_tail(get_anthropic_client(), user_id, result)
+            if was_tail_rewritten:
+                logger.info(f"Left-panel question-tail rewrite applied — user:{user_id}")
 
         logger.info(
             f"Left-panel reply — topic:{topic} tone:{tone} "
-            f"stage:{intent_data.get('stage')} tokens:{max_tokens} register:{register}"
+            f"stage:{intent_data.get('stage')} register:{register}"
         )
         return {'response': result}
 
