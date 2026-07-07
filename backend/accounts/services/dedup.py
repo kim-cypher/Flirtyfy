@@ -72,7 +72,7 @@ def rewrite_colliding_sentence(client, sentence: str, matched_ngram: str, is_que
         )
     try:
         resp = client.messages.create(
-            model='claude-haiku-4-5',
+            model=_rewrite_model(),
             system="You are a precise rewriting assistant. Output only the requested rewritten text, nothing else.",
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.9,
@@ -133,13 +133,60 @@ def dedupe_against_history(client, user_id: int, text: str, n: int = 4):
 
 
 # ---------------------------------------------------------------------------
-# Semantic uniqueness check — catches repeated MEANING/STRUCTURE even when
-# the wording is completely different ("I keep replaying this" vs "I keep
-# catching myself thinking about it"), which literal n-gram matching cannot
-# see at all. Adds one OpenAI embedding call (~150-300ms) per response.
+# Near-duplicate similarity check — Postgres pg_trgm trigram similarity.
+#
+# Replaces the OpenAI-embedding "semantic" layer entirely: that layer required
+# an OpenAI key, Redis, AND a Celery worker to all be alive (any failure was
+# silent), embedded the WRONG text for left-panel replies (the pasted
+# conversation instead of the reply), and died completely on OpenAI quota
+# errors. Trigram similarity runs synchronously in the same Postgres query
+# path with zero external dependencies, and catches heavily-overlapping
+# rewordings that the exact 4-gram check misses.
+#
+# Requires the pg_trgm extension + GIN index (migration
+# 0014_enable_pg_trgm_extension).
 # ---------------------------------------------------------------------------
 
-def rewrite_semantic_collision(client, text: str, reference_text: str):
+_SIMILARITY_THRESHOLD = 0.5  # trigram similarity; 0.5+ means heavy overlap
+
+
+def _normalize_for_similarity(text: str) -> str:
+    """Match views._normalize_text so candidate and stored texts compare fairly."""
+    text = re.sub(r'[^\w\s]', '', text.lower())
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def find_similar_past_reply(user_id: int, text: str, days: int = _DEDUP_DAYS,
+                            threshold: float = _SIMILARITY_THRESHOLD):
+    """Most-similar past AIReply above `threshold`, or None. Never raises."""
+    from accounts.novelty_models import AIReply
+    from django.contrib.postgres.search import TrigramSimilarity
+
+    normalized = _normalize_for_similarity(text)
+    if not normalized:
+        return None
+    since = timezone.now() - timedelta(days=days)
+    try:
+        return (
+            AIReply.objects
+            .filter(user_id=user_id, created_at__gte=since)
+            .exclude(normalized_text='')
+            .annotate(sim=TrigramSimilarity('normalized_text', normalized))
+            .filter(sim__gt=threshold)
+            .order_by('-sim')
+            .first()
+        )
+    except Exception as e:
+        logger.error(f"Trigram similarity lookup failed (is pg_trgm installed?): {e}")
+        return None
+
+
+def _rewrite_model():
+    from django.conf import settings
+    return getattr(settings, 'ANTHROPIC_REWRITE_MODEL', 'claude-haiku-4-5')
+
+
+def rewrite_similar_collision(client, text: str, reference_text: str):
     """One LLM call: rewrite the full message to stop resembling a specific past reply."""
     prompt = (
         "Rewrite this message so it keeps the same warmth and intent, but uses clearly "
@@ -147,16 +194,16 @@ def rewrite_semantic_collision(client, text: str, reference_text: str):
         "Do not reuse its sentence shape, its specific images, or its phrasing.\n\n"
         f"Reference (avoid resembling this): \"{reference_text.strip()}\"\n\n"
         f"Message to rewrite: \"{text.strip()}\"\n\n"
-        "Keep it exactly two sentences, similar length, ending in a genuine question. "
+        "Keep the same number of sentences and similar length, ending in a genuine question. "
         "Output only the rewritten message, nothing else."
     )
     try:
         resp = client.messages.create(
-            model='claude-haiku-4-5',
+            model=_rewrite_model(),
             system="You are a precise rewriting assistant. Output only the requested rewritten message, nothing else.",
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.95,
-            max_tokens=110,
+            max_tokens=130,
         )
         out = resp.content[0].text.strip().strip('"')
         if not out:
@@ -165,32 +212,66 @@ def rewrite_semantic_collision(client, text: str, reference_text: str):
             out = out.rstrip('.,!;: ') + '?'
         return out
     except Exception as e:
-        logger.error(f"Semantic dedup rewrite call failed: {e}")
+        logger.error(f"Similarity dedup rewrite call failed: {e}")
         return None
 
 
-def dedupe_semantic(client, user_id: int, text: str, threshold: float = 0.88):
+def dedupe_similar(client, user_id: int, text: str, threshold: float = _SIMILARITY_THRESHOLD):
     """
-    Synchronous semantic-similarity check against the user's 30-day history.
-    On a high-similarity hit, rewrites the whole message via one LLM call.
+    Synchronous near-duplicate check against the user's 30-day history using
+    pg_trgm. On a high-similarity hit, rewrites the whole message via one
+    cheap LLM call.
 
     Returns (final_text, was_rewritten: bool). Never raises; any failure
-    (embedding API down, no match, rewrite fails) returns the original text
-    unchanged — this is a best-effort pass, never a hard gate.
+    returns the original text unchanged — best-effort pass, never a hard gate.
     """
-    from .similarity import get_embedding, semantic_similar_replies
-
-    embedding = get_embedding(text)
-    if embedding is None:
-        return text, False
-
-    since = timezone.now() - timedelta(days=_DEDUP_DAYS)
-    closest = semantic_similar_replies(user_id, embedding, since, threshold=threshold).first()
+    closest = find_similar_past_reply(user_id, text, threshold=threshold)
     if closest is None:
         return text, False
 
-    rewritten = rewrite_semantic_collision(client, text, closest.normalized_text)
+    rewritten = rewrite_similar_collision(client, text, closest.normalized_text)
     if not rewritten:
         return text, False
 
     return rewritten, True
+
+
+# ---------------------------------------------------------------------------
+# Question-tail uniqueness — the final question is where repetition is most
+# visible to a customer ("Could you handle knowing exactly what I was thinking
+# right now?" appeared under six different buttons). Compares the candidate's
+# final question against the ENDINGS of past replies (every reply ends with
+# its question) and rewrites just the question on a collision.
+# ---------------------------------------------------------------------------
+
+def dedupe_question_tail(client, user_id: int, text: str, threshold: float = 0.72):
+    """Returns (final_text, was_rewritten: bool). Never raises."""
+    from difflib import SequenceMatcher
+
+    try:
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        if not sentences or not sentences[-1].strip().endswith('?'):
+            return text, False
+        tail_raw = sentences[-1].strip()
+        tail = _normalize_for_similarity(tail_raw)
+        tail_words = tail.split()
+        if len(tail_words) < 4:
+            return text, False
+
+        for past in get_recent_user_texts(user_id):
+            past_words = past.split()
+            if len(past_words) < 4:
+                continue
+            past_tail = ' '.join(past_words[-len(tail_words):])
+            if SequenceMatcher(None, tail, past_tail).ratio() >= threshold:
+                rewritten_q = rewrite_colliding_sentence(
+                    client, tail_raw, past_tail, is_question=True
+                )
+                if rewritten_q:
+                    sentences[-1] = rewritten_q
+                    return ' '.join(sentences), True
+                return text, False
+        return text, False
+    except Exception as e:
+        logger.error(f"Question-tail dedup failed: {e}")
+        return text, False
