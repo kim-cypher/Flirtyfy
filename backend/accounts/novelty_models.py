@@ -41,6 +41,15 @@ class AIReply(models.Model):
         blank=True,
         help_text="Button name if intent_type='button' (e.g., 'morning_flirt', 'sensual')"
     )
+    # Monitoring fields — zero LLM cost, pure DB storage.
+    delivered_text = models.TextField(
+        blank=True, default='',
+        help_text="The exact reply text shown to the user (normalized_text is lossy — lowercased, punctuation stripped)"
+    )
+    conversation_fingerprint = models.CharField(
+        max_length=64, null=True, blank=True, db_index=True,
+        help_text="SHA-256 of the normalized pasted conversation — groups every reply generated for the same upload"
+    )
 
     class Meta:
         indexes = [
