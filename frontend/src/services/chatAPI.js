@@ -41,6 +41,7 @@ export const generateSpecificResponse = async (conversation, timeSlot = null) =>
     return {
       success: true,
       response: response.data.response,
+      replyId: response.data.reply_id || null,
       intent: response.data.intent,
       message: response.data.message,
     };
@@ -69,6 +70,7 @@ export const generateButtonResponse = async (buttonIntent, timeSlot = null) => {
     return {
       success: true,
       response: response.data.response,
+      replyId: response.data.reply_id || null,
       theme: response.data.theme,
       message: response.data.message,
     };
@@ -82,6 +84,17 @@ export const generateButtonResponse = async (buttonIntent, timeSlot = null) => {
 /**
  * All 40 buttons in order (left→right, top→bottom).
  * Row 7 buttons appear below a divider in RightPanel.
+
+ * Rate a delivered reply — excellent | good | bad.
+ * Fire-and-forget from the UI's perspective; failures are non-fatal.
+ */
+export const sendReplyFeedback = async (replyId, rating) => {
+  const response = await apiClient.post('/chat/feedback/', { reply_id: replyId, rating });
+  return response.data;
+};
+
+/**
+ * All buttons in order (left→right, top→bottom).
  * emoji + shortLabel are used for the compact grid display.
  * description is used as tooltip title.
  */

@@ -1,9 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { sendReplyFeedback } from '../services/chatAPI';
 import './OutputArea.css';
 
-function OutputArea({ response, loading, error }) {
+const RATINGS = [
+  { value: 'excellent', label: 'Excellent' },
+  { value: 'good', label: 'Good' },
+  { value: 'bad', label: 'Bad' },
+];
+
+function OutputArea({ response, replyId, loading, error }) {
   const [copied, setCopied] = useState(false);
+  const [rated, setRated] = useState('');
+
+  // New reply → fresh rating state
+  useEffect(() => {
+    setRated('');
+    setCopied(false);
+  }, [replyId, response]);
 
   const handleCopy = async () => {
     if (!response) return;
@@ -13,6 +27,16 @@ function OutputArea({ response, loading, error }) {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
+    }
+  };
+
+  const handleRate = async (value) => {
+    if (rated || !replyId) return;
+    setRated(value); // optimistic — the user's click always "works"
+    try {
+      await sendReplyFeedback(replyId, value);
+    } catch {
+      /* non-fatal: rating UI already acknowledged */
     }
   };
 
@@ -52,6 +76,27 @@ function OutputArea({ response, loading, error }) {
         >
           {copied ? 'Copied!' : 'Copy to chat'}
         </button>
+        {replyId && (
+          <div className="output-rating" aria-label="Rate this reply">
+            {rated ? (
+              <span className="rating-thanks">Thanks for the feedback!</span>
+            ) : (
+              <>
+                <span className="rating-label">Rate:</span>
+                {RATINGS.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    className={`rating-btn rating-${r.value}`}
+                    onClick={() => handleRate(r.value)}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -59,12 +104,14 @@ function OutputArea({ response, loading, error }) {
 
 OutputArea.propTypes = {
   response: PropTypes.string,
+  replyId: PropTypes.number,
   loading: PropTypes.bool,
   error: PropTypes.string,
 };
 
 OutputArea.defaultProps = {
   response: null,
+  replyId: null,
   loading: false,
   error: null,
 };

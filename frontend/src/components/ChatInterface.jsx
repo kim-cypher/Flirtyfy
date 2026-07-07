@@ -10,10 +10,12 @@ import './ChatInterface.css';
 function ChatInterface({ user, token, timeSlot }) {
   const navigate = useNavigate();
   const [leftResponse, setLeftResponse] = useState('');
+  const [leftReplyId, setLeftReplyId] = useState(null);
   const [leftLoading, setLeftLoading] = useState(false);
   const [leftError, setLeftError] = useState('');
 
   const [rightResponse, setRightResponse] = useState('');
+  const [rightReplyId, setRightReplyId] = useState(null);
   const [rightLoading, setRightLoading] = useState(false);
   const [rightLoadingButton, setRightLoadingButton] = useState(null);
   const [rightError, setRightError] = useState('');
@@ -22,10 +24,12 @@ function ChatInterface({ user, token, timeSlot }) {
     setLeftLoading(true);
     setLeftError('');
     setLeftResponse('');
+    setLeftReplyId(null);
 
     try {
       const result = await generateSpecificResponse(conversation, timeSlot);
       setLeftResponse(result.response);
+      setLeftReplyId(result.replyId);
     } catch (error) {
       if (error.outOfClicks) {
         navigate('/subscribe');
@@ -42,10 +46,12 @@ function ChatInterface({ user, token, timeSlot }) {
     setRightLoadingButton(buttonIntent);
     setRightError('');
     setRightResponse('');
+    setRightReplyId(null);
 
     try {
       const result = await generateButtonResponse(buttonIntent, timeSlot);
       setRightResponse(result.response);
+      setRightReplyId(result.replyId);
     } catch (error) {
       if (error.outOfClicks) {
         navigate('/subscribe');
@@ -70,6 +76,7 @@ function ChatInterface({ user, token, timeSlot }) {
           <div className="output-wrapper">
             <OutputArea
               response={leftResponse}
+              replyId={leftReplyId}
               loading={leftLoading}
               error={leftError}
             />
@@ -90,6 +97,7 @@ function ChatInterface({ user, token, timeSlot }) {
           <div className="output-wrapper">
             <OutputArea
               response={rightResponse}
+              replyId={rightReplyId}
               loading={rightLoading}
               error={rightError}
             />
