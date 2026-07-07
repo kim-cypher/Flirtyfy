@@ -50,6 +50,9 @@ class AIReply(models.Model):
         max_length=64, null=True, blank=True, db_index=True,
         help_text="SHA-256 of the normalized pasted conversation — groups every reply generated for the same upload"
     )
+    # LLM-as-judge fields — populated by `manage.py judge_replies`, NULL until judged.
+    quality_score = models.IntegerField(null=True, blank=True, db_index=True)
+    quality_notes = models.TextField(blank=True, default='')
 
     class Meta:
         indexes = [
