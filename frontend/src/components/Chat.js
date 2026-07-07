@@ -58,6 +58,13 @@ function Chat() {
   const [manualSetAt, setManualSetAt] = useState(null);
   const [checkInSlot, setCheckInSlot] = useState(null); // non-null while the modal is shown
 
+  // Time selection now lives in a one-time modal (once per browser session)
+  // instead of a permanent chip bar cluttering the header. Functionality is
+  // identical: pick a slot (manual) or use device time (auto-advancing).
+  const [showTimeModal, setShowTimeModal] = useState(
+    () => !sessionStorage.getItem('ff_time_prompted')
+  );
+
   const [availableClicks, setAvailableClicks] = useState(null);
   const [isPremium, setIsPremium] = useState(false);
 
@@ -79,11 +86,22 @@ function Chat() {
     return () => clearInterval(id);
   }, [refreshCredits]);
 
-  const handleChipClick = (slotId) => {
+  const handlePickTime = (slotId) => {
     setTimeSlot(slotId);
     setIsManual(true);
     setManualSetAt(Date.now());
     setCheckInSlot(null);
+    setShowTimeModal(false);
+    sessionStorage.setItem('ff_time_prompted', '1');
+  };
+
+  const handleUseDeviceTime = () => {
+    setIsManual(false);
+    setManualSetAt(null);
+    setTimeSlot(hourToSlot(new Date().getHours()));
+    setCheckInSlot(null);
+    setShowTimeModal(false);
+    sessionStorage.setItem('ff_time_prompted', '1');
   };
 
   const tick = useCallback(() => {
@@ -119,6 +137,7 @@ function Chat() {
   };
 
   const handleLogout = () => {
+    if (!window.confirm('Log out of Flirtyfy?')) return;
     dispatch(logout());
     navigate('/login');
   };
@@ -165,21 +184,34 @@ function Chat() {
         </div>
       </div>
 
-      {/* Global time bar — full width, applies to both panels */}
-      <div className="time-bar" role="group" aria-label="Select time of day">
-        <span className="time-bar-label">Time</span>
-        {TIME_SLOTS.map((slot) => (
-          <button
-            key={slot.id}
-            className={`time-chip${timeSlot === slot.id ? ' active' : ''}`}
-            onClick={() => handleChipClick(slot.id)}
-            type="button"
-            aria-pressed={timeSlot === slot.id}
-          >
-            {slot.label}
-          </button>
-        ))}
-      </div>
+      {/* Time selection modal — shown once per session instead of a chip bar */}
+      {showTimeModal && (
+        <div className="time-checkin-overlay" role="dialog" aria-modal="true">
+          <div className="time-checkin-modal">
+            <p className="time-checkin-text">
+              <strong>What time is it for you right now?</strong><br />
+              Replies read differently in the morning than late at night.
+            </p>
+            <div className="time-modal-grid">
+              {TIME_SLOTS.map((slot) => (
+                <button
+                  key={slot.id}
+                  className={`time-chip${timeSlot === slot.id ? ' active' : ''}`}
+                  onClick={() => handlePickTime(slot.id)}
+                  type="button"
+                >
+                  {slot.emoji} {slot.label}
+                </button>
+              ))}
+            </div>
+            <div className="time-checkin-actions">
+              <button type="button" className="time-checkin-btn switch" onClick={handleUseDeviceTime}>
+                Use my device time ({slotLabel(hourToSlot(new Date().getHours()))})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Chat Interface - Split Screen */}
       <div className="chat-interface-wrapper">

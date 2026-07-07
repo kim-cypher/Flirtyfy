@@ -360,3 +360,12 @@
     font-size: 10px;
   }
 }
+
+/* ── Time selection modal grid (chips reuse .time-chip styles) ─────────── */
+.time-modal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 14px 0;
+}

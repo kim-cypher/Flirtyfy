@@ -43,7 +43,7 @@ function LeftPanel({ onGenerate, loading }) {
           className="conversation-textarea"
           value={conversation}
           onChange={handleChange}
-          placeholder="Paste the conversation here — his messages and yours. The AI reads the full context and writes your next reply."
+          placeholder="Paste the last three conversations here…"
           disabled={loading}
           maxLength={MAX_CHARS}
         />

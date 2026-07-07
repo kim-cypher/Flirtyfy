@@ -55,6 +55,7 @@ function Dashboard() {
   }, [phase, charIndex, msgIndex]);
 
   const handleLogout = () => {
+    if (!window.confirm('Log out of Flirtyfy?')) return;
     dispatch(logout());
     navigate('/login');
   };
@@ -74,8 +75,10 @@ function Dashboard() {
       </nav>
 
       <main className="db-stage">
+
         <div className="db-stage-left">
-          <p className="db-label">AI · Live Preview</p>
+
+          <p className="db-label">Live Preview</p>
 
           <div className={`db-bubble ${visible ? 'db-bubble--visible' : 'db-bubble--hidden'}`}>
             <span className="db-text">{displayText}</span>

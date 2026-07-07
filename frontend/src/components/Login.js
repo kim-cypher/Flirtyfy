@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
-import { login } from '../redux/actions/authActions';
+import { login, clearAuthError } from '../redux/actions/authActions';
 import FlirtyfyLogo from './FlirtyfyLogo';
 import './Auth.css';
 
@@ -11,6 +11,11 @@ function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { loading, error } = useSelector(state => state.auth);
+
+  // A register failure must not follow the user onto the login page.
+  useEffect(() => {
+    dispatch(clearAuthError());
+  }, [dispatch]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

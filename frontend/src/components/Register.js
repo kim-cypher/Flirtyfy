@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { register } from '../redux/actions/authActions';
+import { register, clearAuthError } from '../redux/actions/authActions';
 import FlirtyfyLogo from './FlirtyfyLogo';
 import './Auth.css';
 
@@ -36,17 +36,33 @@ function Register() {
   const [searchParams] = useSearchParams();
   const referralCode = searchParams.get('ref') || '';
   const { loading, error } = useSelector(state => state.auth);
+  // A login failure must not follow the user onto the register page.
+  useEffect(() => {
+    dispatch(clearAuthError());
+  }, [dispatch]);
 
   const checkAge = (day, month, year) => {
-    if (!day || !month || !year) { setAgeMismatch(''); return; }
+    if (!day || !month || !year) {
+      setAgeMismatch('');
+      return;
+    }
+
     const selectedDate = new Date(year, month - 1, day);
     const today = new Date();
+
     let age = today.getFullYear() - selectedDate.getFullYear();
     const monthDiff = today.getMonth() - selectedDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < selectedDate.getDate())) {
+
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < selectedDate.getDate())
+    ) {
       age -= 1;
     }
-    setAgeMismatch(age < 18 ? 'You must be at least 18 years old to use Flirtyfy' : '');
+
+    setAgeMismatch(
+      age < 18 ? 'You must be at least 18 years old to use Flirtyfy' : ''
+    );
   };
 
   const handleDayChange = (e) => { setDobDay(e.target.value); checkAge(e.target.value, dobMonth, dobYear); };
@@ -79,7 +95,7 @@ function Register() {
             <span className="auth-brand-accent">conversation.</span>
           </h2>
           <p className="auth-brand-desc">
-            AI-powered replies that feel real.<br />Never robotic. Never repeating.
+            Replies that feel real.<br />Never robotic. Never repeating.
           </p>
           <div className="auth-brand-dots">
             <span /><span /><span />

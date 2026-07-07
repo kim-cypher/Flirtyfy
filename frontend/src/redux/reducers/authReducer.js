@@ -46,6 +46,11 @@ export default function authReducer(state = initialState, action) {
         loading: false,
         error: null,
       };
+    case 'CLEAR_AUTH_ERROR':
+      return {
+        ...state,
+        error: null,
+      };
     default:
       return state;
   }

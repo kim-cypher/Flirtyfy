@@ -89,3 +89,7 @@ export const logout = () => (dispatch) => {
   localStorage.removeItem('access_token');
   dispatch({ type: 'LOGOUT' });
 };
+
+// Clears a stale auth error when switching between login and register pages,
+// so a failed login attempt doesn't display on the register form (and vice versa).
+export const clearAuthError = () => ({ type: 'CLEAR_AUTH_ERROR' });
