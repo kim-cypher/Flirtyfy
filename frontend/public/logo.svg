@@ -1,0 +1,19 @@
+<svg width="128" height="152" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Flirtyfy brand mark: a flame with a chat-bubble tail.
+       Flame = heat/desire. Tail = conversation. -->
+  <defs>
+    <linearGradient id="fyGrad" x1="22" y1="38" x2="12" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#d946a8"/>
+      <stop offset="55%" stop-color="#9333ea"/>
+      <stop offset="100%" stop-color="#6c4fc9"/>
+    </linearGradient>
+    <linearGradient id="fyGradInner" x1="16" y1="30" x2="16" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.04)"/>
+    </linearGradient>
+  </defs>
+  <path d="M16 1C21 5 29 12 29 21C29 30 23 36 16 36C9 36 3 30 3 21C3 12 11 5 16 1Z" fill="url(#fyGrad)"/>
+  <path d="M10 35L6.5 38.5L20 35.5Z" fill="url(#fyGrad)"/>
+  <path d="M16 9C16 9 22 15 22 21C22 25.5 19.5 28 16 28C12.5 28 10 25.5 10 21C10 15 16 9 16 9Z" fill="url(#fyGradInner)"/>
+  <ellipse cx="12.5" cy="15" rx="2.2" ry="3.2" fill="rgba(255,255,255,0.18)" transform="rotate(-20 12.5 15)"/>
+</svg>
