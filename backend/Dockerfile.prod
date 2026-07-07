@@ -31,17 +31,23 @@ USER appuser
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8000/health/ || exit 1
 
-# Run Gunicorn with production settings
+# Run Gunicorn with production settings.
+# threads=8: generation requests spend ~3s WAITING on the Anthropic API
+# (I/O-bound), so threads are nearly free concurrency. 4 replicas x 8 workers
+# x 8 threads = 256 concurrent request slots (~70 generations/sec).
+# timeout=60: must exceed the Anthropic client timeout (30s) plus retry
+# headroom — at 30s gunicorn killed the worker mid-request (user saw a 502)
+# whenever the API was slow.
 CMD ["gunicorn", \
      "flirty_backend.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "8", \
      "--worker-class", "gthread", \
-     "--threads", "2", \
+     "--threads", "8", \
      "--worker-tmp-dir", "/dev/shm", \
      "--max-requests", "1000", \
      "--max-requests-jitter", "100", \
-     "--timeout", "30", \
+     "--timeout", "60", \
      "--graceful-timeout", "10", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
