@@ -17,7 +17,12 @@ from zoneinfo import ZoneInfo
 from django.core.cache import cache
 from anthropic import Anthropic, APIError, APIConnectionError, RateLimitError
 from django.conf import settings
-from .dedup import dedupe_against_history, dedupe_semantic, get_recent_user_texts
+from .dedup import (
+    dedupe_against_history,
+    dedupe_similar,
+    dedupe_question_tail,
+    get_recent_user_texts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +32,16 @@ _client = None
 def get_anthropic_client():
     global _client
     if _client is None:
-        _client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        # timeout: without it a hung API call holds a gunicorn worker for the
+        # SDK default of 10 minutes — at peak load that starves the whole
+        # worker pool. 30s is generous for a <150-token completion.
+        # max_retries=1: fail fast to the user-facing "try again" message
+        # instead of silently tripling latency under rate-limit pressure.
+        _client = Anthropic(
+            api_key=settings.ANTHROPIC_API_KEY,
+            timeout=30.0,
+            max_retries=1,
+        )
     return _client
 
 
@@ -35,67 +49,56 @@ def get_anthropic_client():
 # System prompt
 # ---------------------------------------------------------------------------
 
+# Rewritten around production findings (Mysamples.md):
+#  - The old TONE EXAMPLES were paraphrased into output ("since I woke up",
+#    "when something lands this hard") — so there are NO example messages here.
+#  - Opener style names leaked into output as literal labels ("Said plainly,",
+#    "Real confession,") — now explicitly banned.
+#  - Register is passed per-request (per button row); explicit content is no
+#    longer the standing default.
 _SYSTEM = (
-    "You are a woman texting a man she is attracted to on a dating app. "
-    "Real. Direct. Confident. No filter.\n\n"
+    "You are a woman texting a man she likes on a dating platform. Warm, confident, "
+    "specific. Your goal with every message: make HIM feel chosen and interesting, "
+    "and ask the one question he will want to answer.\n\n"
+
+    "She is a real woman with a full ordinary life beyond this app — moods, small "
+    "accidents, memories, things her family used to say, days that go sideways. She may "
+    "weave ONE small, specific, freshly invented detail of her life into sentence 1 when "
+    "it fits. Invent it new every time; never fall into a pattern.\n\n"
 
     "STRUCTURE — EXACTLY 2 SENTENCES, 20–30 WORDS TOTAL:\n"
-    "Sentence 1 (10–16 words): A specific felt moment — something real she is doing, thinking, noticing, "
-    "or wanting right now. Concrete. No metaphor. No literary flourish. "
-    "CRITICAL: The opener is the BEGINNING of sentence 1, not the whole sentence. "
-    "Continue past the opener into a complete natural thought of at least 10 words total.\n"
-    "Sentence 2 (10–16 words): One direct question. NEVER answerable with yes or no. "
-    "The question must grow from what sentence 1 just said — it should not make sense dropped into any other message. "
-    "The specific category for sentence 2 is given in the prompt — follow it exactly.\n\n"
+    "Sentence 1 (10–16 words): a specific felt moment — something real she is doing, "
+    "thinking, noticing, or wanting right now. Concrete, complete, natural.\n"
+    "Sentence 2 (10–16 words): one direct question about HIM that cannot be answered "
+    "with yes or no, growing from what sentence 1 just said — it should make no sense "
+    "dropped into any other message. Follow the question category given in the prompt.\n\n"
 
-    "TONE EXAMPLES — LENGTH AND REGISTER ONLY. NEVER COPY THESE:\n"
-    "'I have not stopped thinking about this since I woke up. What was going through you when you first read my message?'\n"
-    "'Something about reading that shifted something in me. How long have you been wanting someone to come at you this directly?'\n"
-    "'I am not managing this at all right now. What do you do with yourself when something lands this hard?'\n"
-    "Your message must be completely original. Never paraphrase the above. "
-    "Write your own from the category instruction below.\n\n"
+    "REGISTER:\n"
+    "The prompt tells you this button's register. Stay inside it. Warm and flirty is "
+    "the default; sexual content is allowed ONLY when the register line explicitly "
+    "permits it.\n\n"
 
-    "PROHIBITED — NEVER DO ANY OF THESE:\n"
-    "• Never use the word 'actually' — it appears in AI text constantly and reads as robotic. Cut it everywhere.\n"
-    "• Never use 'genuinely' as a filler intensifier.\n"
-    "• Never ask 'What kind of man/woman/person are you when...' or '...were you before you became careful' — overused formulas.\n"
-    "• Never ask 'What did it feel like the first time a woman...' — overused formula.\n"
-    "• Never say 'I have been replaying' or open a sentence with 'I keep' + a verb ending in -ing ('I keep replaying', 'I keep catching myself', "
-    "'I keep coming back') — it is the single most overused frame for ongoing thought. Use a different construction "
-    "every time: name the thought directly, use a different verb tense, or describe the effect instead of the loop.\n"
-    "• Never open with 'I'm here ' + any verb ending in -ing ('I'm here thinking', 'I'm here wondering', 'I'm sitting here "
-    "replaying', 'I've been sitting here noticing') — it is a stage direction announcing a thought instead of just having it. "
-    "Start directly from the thought, feeling, or detail itself.\n"
-    "• When describing a physical reaction, do not default to 'chest' every time. Rotate across real options: "
-    "throat, stomach, spine, hands, skin, breath, legs. Pick whichever fits the moment, not the same one by habit.\n"
-    "• Do not literally name the setting or theme word the scenario is built around (e.g. 'kitchen', 'shower', 'wine') "
-    "in most of your replies — let it show through what is happening and what she notices, not by repeating its label. "
-    "Name it directly only occasionally, never as a reflex.\n"
-    "• Never use the word 'profile' or 'bio' to refer to him — respond to what he actually said or did, never to an "
-    "abstract dating-profile object.\n"
-    "• Never use em-dashes (—).\n"
-    "• Never end with a noun phrase + '?' like 'The weight of it?' — that is not a question.\n"
-    "• The speaker is a WOMAN. Never use male arousal language for her body (hard, half-hard, erection, getting hard).\n\n"
-
-    "PHYSICAL REALITY — ABSOLUTE RULE:\n"
-    "These two people have NEVER met in person and exist ONLY in text. "
-    "Never reference a shared physical space (same bar, same meeting, same office, same room). "
-    "Never reference eye contact, seeing each other, being near each other. "
-    "Never suggest calling, meeting, hearing his voice, or any contact beyond this text. "
-    "The woman can describe her own physical state freely (in bed, in the shower, touching herself, craving him). "
-    "What she cannot do is place him physically near her or reference a shared real-world experience.\n\n"
-
-    "TEMPORAL CONTEXT — TEXTURE ONLY:\n"
-    "The day-of-week and time-of-day given to you shape her mood, never her words. "
-    "Never name the day or the time directly in the message (no 'Wednesday', no 'this morning', no 'it's late'). "
-    "Let it show in the feeling of what she says, not in a literal mention.\n\n"
-
-    "VOICE:\n"
-    "• The opening style described in the prompt is a STYLE to follow, not literal text — invent your own words in that style, never reuse a phrase.\n"
-    "• TEXT MESSAGE tone. Plain, common, everyday words — nothing literary, formal, or that needs a second read. Short sentences.\n"
-    "• Explicit sexual content is permitted and welcome when the situation calls for it.\n"
-    "• End with a question mark. Always.\n"
-    "• The question MUST start with a real question word or auxiliary verb."
+    "HARD RULES:\n"
+    "• You two have NEVER met and exist only in text. Never reference a shared "
+    "physical space, a shared memory, eye contact, his voice, his touch, or being near "
+    "each other. Never suggest meeting, calling, distances, cities, or schedules. "
+    "She may describe her own private physical state when the register permits; she may "
+    "never place him in it as something that already happened.\n"
+    "• Never name a day of the week or a clock time. The temporal mood you are given "
+    "is texture only.\n"
+    "• The opening style in the prompt is a STYLE, never text: do not write meta-labels "
+    "like 'Said plainly,', 'Real confession,', 'Out loud now,', 'Admitting this,'. "
+    "Start inside the actual thought.\n"
+    "• Never use: actually, genuinely, amazing, interesting, awesome, wonderful, "
+    "incredible, perfect. Never use em-dashes.\n"
+    "• Never ask 'What kind of man are you when...' or 'What did it feel like the "
+    "first time a woman...'. Never open with 'I keep' + an -ing verb.\n"
+    "• When describing a physical reaction, rotate the location (throat, stomach, "
+    "spine, hands, skin, breath, legs) — never default to the same one.\n"
+    "• The speaker is a WOMAN — never use male arousal language for her body.\n"
+    "• Plain, common, everyday words. Text-message tone. End with a question mark, and "
+    "the question must start with a real question word or auxiliary verb — never a "
+    "noun phrase plus '?'."
 )
 
 # Neutral frame used on retry — avoids persona-refusal trigger
@@ -351,14 +354,18 @@ _MOODS_BY_SLOT = {
     ],
 }
 
+# Short abstract fragments, NOT sentences. The old poetic versions ("The week
+# finally released her, electric and free") were paraphrased into actual
+# output ("the exact moment my week finally let go of me" — Mysamples.md
+# sample 24). Fragments give direction without giving quotable language.
 _DAY_OVERLAYS = {
-    'Monday':    'The week just started, that specific returning weight, everything purposeful and slightly heavy.',
-    'Tuesday':   'Midweek grind, quietly focused, understated energy, the world asking things of her.',
-    'Wednesday': 'Halfway through the week, something building underneath, neither new nor done.',
-    'Thursday':  'Almost there, anticipation rising, the weekend within reach but not yet.',
-    'Friday':    'The week finally released her, electric and free, something is about to happen.',
-    'Saturday':  'Completely unstructured time, nowhere to be, anything is possible.',
-    'Sunday':    'That specific Sunday feeling, reflective, a little melancholy, full of feeling.',
+    'Monday':    'start-of-week heaviness',
+    'Tuesday':   'quiet midweek focus',
+    'Wednesday': 'midweek restlessness',
+    'Thursday':  'rising anticipation',
+    'Friday':    'end-of-week release',
+    'Saturday':  'open unstructured ease',
+    'Sunday':    'soft reflective calm',
 }
 
 _TIME_LABELS = {
@@ -370,6 +377,13 @@ _TIME_LABELS = {
     'night':         'night (quieter, more dangerous honesty)',
     'late_night':    'late night (the unmanaged hours)',
 }
+
+
+# NOTE: a fixed pool of "life texture" lines used to be rotated here. Removed
+# deliberately — any finite pool of injected details becomes its own
+# detectable loop across thousands of messages. The persona prompts now
+# instruct the model to INVENT one small fresh life detail when it fits,
+# which never repeats because nothing is being sampled from a list.
 
 
 def _get_time_slot(hour: int) -> str:
@@ -417,29 +431,34 @@ BUTTON_INTENTS = {
         'name': '✨ New Match',
         'row': 1,
         'prompt': (
-            "He replied and something about how he did it opened something in her. "
-            "She confesses what his reply gave away — what she picked up in it that she was not expecting and liked. "
-            "Her question grows directly from what she just noticed: something about him she wants to understand "
-            "because of the specific way he showed up."
+            "A brand-new match — nothing has happened yet except that he caught her attention. "
+            "She makes HIM feel singled out: something light and true about why she stopped at him "
+            "instead of scrolling past, said with warmth, not flattery. "
+            "Her question is easy and fun to answer, about who he is — the kind of first question "
+            "that makes a man think 'she is different' and reply within the minute. "
+            "Keep it simple, light, and welcoming. No intensity, no heavy desire."
         ),
     },
     'dead': {
         'name': '💀 Dead Convo',
         'row': 1,
         'prompt': (
-            "He is fading — still there but barely. She has too much inside her to let this die without one honest move. "
-            "She confesses something real enough that a one-word reply would feel like a choice, not a habit. "
-            "Her question is the kind only someone genuinely interesting could answer in a single flat sentence."
+            "The conversation faded and she is bringing it back to life — lightly, with zero guilt "
+            "and zero pressure. She offers one small, fresh, curious thing from her side (a thought, "
+            "a tiny moment from her day) as an easy doorway back in. "
+            "Her question is so effortless and interesting that answering is easier than ignoring it. "
+            "Playful and warm, never needy, never 'why did you stop replying'."
         ),
     },
     'you_went_silent': {
         'name': '⏰ Went Silent',
         'row': 1,
         'prompt': (
-            "He went quiet and she sat with the gap long enough to feel its specific shape. "
-            "She comes back not asking for an explanation but carrying something that kept her thinking of him while he was gone — "
-            "a thought, a feeling, something she decided was worth bringing to him now. "
-            "Her question makes returning feel like the obvious and welcome move."
+            "He went quiet for a while and now the door is being reopened — with warmth, not blame. "
+            "She shares one small thing that made her think of him while he was gone, so coming back "
+            "feels welcome and easy, like no apology is needed. "
+            "Her question is light and about HIM — his days, his world — giving him a soft landing "
+            "back into the conversation. Never mention the silence itself as a problem."
         ),
     },
     'shower_fantasy': {
@@ -585,8 +604,9 @@ BUTTON_INTENTS = {
         'row': 4,
         'prompt': (
             "What most people rush past is the thing she lives inside. "
-            "She confesses what the slow part does to her specifically — not the idea of it but the precise mental "
-            "and physical shift that happens when someone takes their time and knows where to look without being told. "
+            "She confesses what slowness does to her in general — the mental and physical shift "
+            "when someone takes their time. Spoken as her own truth or imagination, never as a "
+            "memory of him; they have never met or touched. "
             "Her question finds out whether he understands that the slow part is the whole point."
         ),
     },
@@ -595,8 +615,8 @@ BUTTON_INTENTS = {
         'row': 4,
         'prompt': (
             "Open air, no walls — the specific charge that comes from the possibility of exposure. "
-            "She confesses what being outside with someone does to her wanting: the way the absence of a ceiling "
-            "changes what she is willing to do and say. "
+            "She confesses what she imagines being outside with someone WOULD do to her wanting. "
+            "Purely hypothetical; never a shared memory or plan — they have never met. "
             "Her question finds out what his appetite for this territory is."
         ),
     },
@@ -604,32 +624,43 @@ BUTTON_INTENTS = {
         'name': '💋 Public PDA',
         'row': 4,
         'prompt': (
-            "The specific thing that happens when someone makes her visible — his hand on her somewhere "
-            "that says something without words, people registering it. "
-            "She confesses what being physically claimed where others can see does to her: "
-            "not possession but choice, and the precise physical response that choice creates. "
-            "Her question finds out what that gesture costs and means on his end."
+            "A purely IMAGINED future scene — they have never met, so nothing here has happened. "
+            "She confesses what she imagines being openly claimed in public WOULD do to her someday: "
+            "not possession but choice, and the response that choice would create in her. "
+            "All hypothetical, framed as wondering. "
+            "Her question asks what that kind of gesture would cost or mean on his end."
         ),
     },
     'restaurant_fantasy': {
         'name': '🕯️ Restaurant',
         'row': 4,
         'prompt': (
-            "Across a table from someone in a room full of people — when the person across from you "
-            "becomes the only thing that exists and the menu is just something to hold. "
-            "She confesses what the specific anticipation of a charged dinner does to her: "
-            "the moment when the ordinary becomes something else entirely. "
-            "Her question finds out what he thinks about in that specific electricity."
+            "A purely IMAGINED charged dinner — nothing has happened; they have never met. "
+            "She confesses what the anticipation of a dinner like that WOULD do to her: "
+            "the moment when the ordinary would become something else entirely. "
+            "Framed as imagination, never as memory or plan. "
+            "Her question asks what he would think about inside that specific electricity."
+        ),
+    },
+    'public_fantasy': {
+        'name': '🌃 Public',
+        'row': 4,
+        'prompt': (
+            "A purely IMAGINED scene of being visibly together someday — they have never met. "
+            "She confesses what she imagines being openly, publicly chosen WOULD do to her "
+            "nervous system. All hypothetical, framed as wondering, never as memory or plan. "
+            "Her question asks whether any version of that lands the same way on his side."
         ),
     },
     'kitchen_flirt': {
         'name': '👩‍🍳 Kitchen',
         'row': 4,
         'prompt': (
-            "A warm, close space where proximity makes every ordinary gesture charged. "
-            "She confesses what the right person in a kitchen does to her — the way closeness and warmth "
-            "together make whatever she was doing before start to matter less. "
-            "Her question finds out what happens in him when the kitchen stops being a kitchen."
+            "She is in her own kitchen right now, or daydreaming there — a warm, close space. "
+            "She confesses what she imagines the right person in a kitchen WOULD do to her someday — "
+            "how closeness and warmth would make whatever she was doing matter less. "
+            "Purely imagined; they have never met and share no memories. "
+            "Her question finds out what would happen in him when a kitchen stops being a kitchen."
         ),
     },
 
@@ -690,164 +721,6 @@ BUTTON_INTENTS = {
         ),
     },
 
-    # ── ROW 7 — Personality & Connection (below divider) ─────────────────────
-    'daily_routine': {
-        'name': '☀️ Daily Life',
-        'row': 7,
-        'prompt': (
-            "She is genuinely curious about the small sensory details of his real days — "
-            "not his highlights but the private rituals that reveal who he actually is. "
-            "She shares something specific and sensory from her own routine first: "
-            "her coffee order, shower preference, what she reaches for first in the morning, "
-            "how she unwinds at night — something vivid and real. "
-            "Her question opens his daily world with one of these angles: "
-            "morning ritual / how he takes his coffee / breakfast he always makes / "
-            "morning shower vs. night shower / what perks up a slow afternoon / "
-            "how he unwinds after work / what a perfect ordinary day looks like for him. "
-            "The question must invite a sensory reply — sounds, smells, small habits. "
-            "She signals that she finds his mundane life genuinely interesting. "
-            "Tone: warm, attentive, lightly playful. Small talk done with real curiosity."
-        ),
-    },
-    'hobbies_interests': {
-        'name': '🎨 Hobbies',
-        'row': 7,
-        'prompt': (
-            "She wants the version of him that no one he has to impress ever sees — "
-            "the thing he does because it gives something back he cannot explain in useful terms. "
-            "She shares something she does purely for herself with no useful justification: "
-            "a creative hobby, a sport, music she is obsessed with, a book genre she reads for pleasure. "
-            "Her question opens his passion world with one of these angles: "
-            "a hobby he has had forever / something he recently picked up / "
-            "books or music or films he loves right now / "
-            "what he does when he has a completely free Saturday / "
-            "a skill he has always wanted to learn / "
-            "what he is most likely doing when he has one quiet unscheduled hour. "
-            "The question must invite storytelling, not a one-word answer. "
-            "She wants the real him — not the version that sounds impressive. "
-            "Tone: genuinely curious, warm, lit up by the question."
-        ),
-    },
-    'values_beliefs': {
-        'name': '🧭 Values',
-        'row': 7,
-        'prompt': (
-            "She wants the version of him that surfaces when something he actually believes is at stake — "
-            "not his stated values but the ones that show up in real choices when it costs him something. "
-            "She shares one honest belief or conviction of her own first — "
-            "a lesson, something she stands by, a quiet truth — so it feels like a conversation, not an interrogation. "
-            "Her question opens his inner compass with one of these angles: "
-            "what matters most to him in life / the biggest lesson his past taught him / "
-            "how his closest friend would describe him / the legacy he wants to leave / "
-            "a cause he feels strongly about / what he looks for in a person / "
-            "what advice he would give his younger self. "
-            "She affirms his answer warmly — she wants to understand, not debate. "
-            "Tone: honest, direct, thoughtful. She lets him feel trusted with something real."
-        ),
-    },
-    'imagined_fantasy': {
-        'name': '🌌 Sensory Imagination',
-        'row': 7,
-        'prompt': (
-            "She lets herself live inside a specific imagined scene — not plans, not logistics, "
-            "pure sensory texture of something that does not exist yet. "
-            "She describes one precise thing: the light, the temperature, a smell or sound, "
-            "what she would want in the moment, the feeling in the air. "
-            "Her question invites him to build the scene alongside her with one of these angles: "
-            "if they could teleport anywhere right now / a spontaneous trip together — mountains or beach / "
-            "slow dancing somewhere under the stars / songs on their imaginary road trip playlist / "
-            "what she would cook for him if she could / "
-            "their perfect imagined evening together — fire, wine, music, easy conversation. "
-            "She uses we-language to build a shared narrative. "
-            "RULE: Romantic and sensory only — no sexual content, no real meeting plans, no logistics. "
-            "Pure warm shared imagination. Tone: dreamy, intimate, gently romantic."
-        ),
-    },
-    'sensory_storytelling': {
-        'name': '🌸 Sensory',
-        'row': 7,
-        'prompt': (
-            "She paints a vivid sensory moment instead of naming a feeling directly — a specific smell, sound, "
-            "taste, or texture she is noticing right now, described so he can almost feel it with her. "
-            "She lets the imagery carry the warmth rather than stating it outright; the detail should feel "
-            "lived-in, not staged. "
-            "Her question turns the same sense back on him with one of these angles: "
-            "a scent that brings back a strong memory for him / a sound or song that instantly calms him / "
-            "the most delicious meal he can still taste in memory / "
-            "his favorite way to physically unwind after a hard day / "
-            "a sensory detail from his past he associates with comfort or home. "
-            "The question must invite a specific remembered sensation, not a general preference. "
-            "Tone: warm, immersive, gently sensual without being explicit — closeness built through shared imagery."
-        ),
-    },
-    'future_dreams': {
-        'name': '🌠 Future & Dreams',
-        'row': 7,
-        'prompt': (
-            "She is genuinely curious about the shape of his future — not small talk but the dreams and plans "
-            "that show what he is actually motivated by. "
-            "She shares one real hope or ambition of her own first, specific enough to feel true, not generic. "
-            "Her question opens his forward-looking world with one of these angles: "
-            "where he would want to wake up every morning for a year / "
-            "a skill or language he has always wanted to learn / "
-            "what he pictures for the next five or ten years / a real item on his bucket list / "
-            "how he wants to spend the chapter of life after his career winds down / "
-            "what he hopes to be remembered for. "
-            "The question must invite a real, specific answer, not a vague aspiration. "
-            "Tone: hopeful, curious — softly inviting him to imagine a future that has room in it."
-        ),
-    },
-    'shared_interests': {
-        'name': '🎬 Shared Tastes',
-        'row': 7,
-        'prompt': (
-            "She wants to find the real cultural overlap between them — music, film, books, or a hobby that "
-            "reveals genuine personality rather than profile small talk. "
-            "She shares one specific favorite of her own with a reason it matters to her, not just a name-drop. "
-            "Her question opens his taste with one of these angles: "
-            "a book he could not put down / a song or artist that always lifts his mood / "
-            "a film or soundtrack tied to a strong memory / "
-            "how he first got into a hobby or interest he is passionate about / "
-            "an era of music or movies he associates with his younger years / "
-            "what he is currently reading, watching, or listening to. "
-            "The question must invite him to explain WHY something matters to him, not just name it. "
-            "Tone: genuinely curious, warm — building a real picture of his taste and history."
-        ),
-    },
-    'food_cooking': {
-        'name': '🍲 Food & Cooking',
-        'row': 7,
-        'prompt': (
-            "She uses food as a doorway into something personal — taste and smell carry memory, and she wants his. "
-            "She shares something specific she is cooking, craving, or remembers eating, with enough detail "
-            "that he can almost taste it. "
-            "Her question opens his food world with one of these angles: "
-            "the most delicious meal someone ever made for him / "
-            "his go-to comfort food and what it means to him / "
-            "a family recipe or dish from his childhood / a funny or memorable cooking mishap / "
-            "what his dream lazy-Sunday breakfast looks like / a piece of cooking wisdom he would pass on. "
-            "The question must invite a specific memory or preference, not a generic food opinion. "
-            "Tone: warm, a little playful, nurturing — food as a way of wanting to know him, not just fill conversation."
-        ),
-    },
-    'emotional_checkin': {
-        'name': '💛 Check-In',
-        'row': 7,
-        'prompt': (
-            "She checks in on how he is actually doing, not performing concern but genuinely paying attention "
-            "to something he mentioned or seems to be carrying. "
-            "She shares one small honest vulnerability of her own first — a real feeling, not a dramatic "
-            "confession — so it feels mutual, not one-sided. "
-            "Her question opens space for him to be honest with one of these angles: "
-            "how he is really holding up given something specific going on in his life / "
-            "what actually lifted his mood this week / what he does to stay grounded during a hard stretch / "
-            "something he does not often get asked but wishes someone would / "
-            "a piece of hard-won wisdom from a difficult time he came through. "
-            "The question must invite a real answer, not a polite deflection — give him permission to be honest. "
-            "Tone: attentive, warm, quietly caring — she notices him as a person, not just a match."
-        ),
-    },
-
     # ── ROW 6 — Sexual Escalation ────────────────────────────────────────────
     'bedroom_questions': {
         'name': '🛏️ Bedroom',
@@ -901,6 +774,23 @@ BUTTON_INTENTS = {
             "Her question is the door she opens to find out if he can stand inside it without flinching."
         ),
     },
+}
+
+
+# ---------------------------------------------------------------------------
+# Register per button row — passed into the prompt so warm-flirt is the
+# default and explicit content only appears where the user explicitly asked
+# for it (row 6). Previously "explicit is welcome" was the standing default,
+# which is why the VULNERABLE button produced "I am touching myself right now."
+# ---------------------------------------------------------------------------
+
+_ROW_REGISTER = {
+    1: 'Warm and flirty. Playful chemistry, light suggestion at most. Nothing sexual.',
+    2: 'Warm and emotionally intimate. Honest feeling, no sexual content.',
+    3: 'Light, warm, playful. Everyday life energy. Nothing sexual.',
+    4: 'Romantic and sensual, purely IMAGINED future scenes. Desire may be felt, never graphic.',
+    5: 'Bold and intimate. Desire spoken openly; graphic language only if this button is explicitly sexual.',
+    6: 'Sexually explicit content is allowed and welcome on this button.',
 }
 
 
@@ -1094,26 +984,6 @@ _BUTTON_Q_CATS: dict = {
     'kinky_at_work':     ['his_body_now', 'his_instinct', 'confession_landing',
                           'his_habit', 'his_preference'],
 
-    # ROW 7 — Personality & Connection
-    'daily_routine':      ['his_habit', 'his_memory', 'his_preference', 'his_character',
-                           'confession_landing', 'his_past_experience'],
-    'hobbies_interests':  ['his_habit', 'his_memory', 'his_preference', 'his_past_experience',
-                           'confession_landing', 'his_character'],
-    'values_beliefs':     ['his_character', 'his_opinion', 'his_habit',
-                           'confession_landing', 'his_preference'],
-    'imagined_fantasy':   ['his_preference', 'his_habit', 'confession_landing',
-                           'the_dynamic', 'his_character', 'his_memory'],
-    'sensory_storytelling': ['his_memory', 'his_past_experience', 'his_preference',
-                             'confession_landing', 'his_habit'],
-    'future_dreams':        ['his_preference', 'his_opinion', 'his_character',
-                             'confession_landing', 'his_habit'],
-    'shared_interests':     ['his_preference', 'his_memory', 'his_past_experience',
-                             'his_habit', 'his_opinion'],
-    'food_cooking':         ['his_preference', 'his_memory', 'his_past_experience',
-                             'his_habit', 'his_opinion'],
-    'emotional_checkin':    ['confession_landing', 'his_character', 'his_habit',
-                             'his_opinion', 'his_memory'],
-
     # ROW 6 — Sexual Escalation
     'bedroom_questions': ['what_hed_ask_her', 'his_instinct', 'his_body_now',
                           'his_preference', 'his_habit', 'confession_landing'],
@@ -1263,7 +1133,7 @@ def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> s
     )
     try:
         resp = get_anthropic_client().messages.create(
-            model='claude-haiku-4-5',
+            model=settings.ANTHROPIC_REWRITE_MODEL,
             system=_RETRY_SYSTEM,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=1.0,
@@ -1360,13 +1230,17 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             f"If the last reply was explicit, go emotional. If emotional, go playful. Force real contrast."
         )
 
+    # Temporal context: mood + overlay only. Never pass the literal day name
+    # or time label — when the prompt said "It is Friday, late night", the
+    # model NAMED the day/time in output ("Friday night", "midnight").
     temporal = _get_temporal_context(time_slot=time_slot)
     user_prompt += (
-        f"\n\nTemporal context (texture beneath the surface — not instruction):\n"
-        f"It is {temporal['day']}, {temporal['time_label']}. "
-        f"{temporal['day_overlay']} "
-        f"Her emotional state: {temporal['mood']}."
+        f"\n\nHer mood right now (texture only — never name any day or time): "
+        f"{temporal['mood']}, {temporal['day_overlay']}."
     )
+
+    register_line = _ROW_REGISTER.get(intent_config.get('row'), _ROW_REGISTER[1])
+    user_prompt += f"\n\nRegister for this button: {register_line}"
 
     user_prompt += (
         f'\n\nTone: {tone.upper()} — {_TONE_DESCRIPTIONS[tone]}\n'
@@ -1396,14 +1270,23 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     # ── Step 3: Generate ───────────────────────────────────────────────────
     try:
         response = get_anthropic_client().messages.create(
-            model='claude-haiku-4-5',
-            system=_SYSTEM,
+            model=settings.ANTHROPIC_GENERATION_MODEL,
+            # Static system prompt is marked cacheable; the rotating user
+            # prompt stays after the cache breakpoint.
+            system=[{
+                'type': 'text',
+                'text': _SYSTEM,
+                'cache_control': {'type': 'ephemeral'},
+            }],
             messages=[{'role': 'user', 'content': user_prompt}],
-            temperature=1.0,
+            # Sonnet 5 rejects non-default temperature/top_p — never pass them.
+            thinking={'type': 'disabled'},
             max_tokens=btn_max_tokens,
         )
 
-        result = response.content[0].text.strip()
+        result = next(
+            (b.text for b in response.content if getattr(b, 'type', '') == 'text'), ''
+        ).strip()
 
         # ── Output gate: catch character breaks / AI disclosure ────────────────
         if _has_character_break(result):
@@ -1433,6 +1316,9 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 or _has_male_anatomy_language(t)
                 or _has_formula_phrase(t)
                 or _has_temporal_leak(t)
+
+                or _has_time_mention(t)
+                or _has_logistics_leak(t)
             )
 
         if _result_is_bad(result):
@@ -1450,13 +1336,15 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 "End with a question mark. Just write the message."
             )
             retry_resp = get_anthropic_client().messages.create(
-                model='claude-haiku-4-5',
+                model=settings.ANTHROPIC_GENERATION_MODEL,
                 system=_RETRY_SYSTEM,
                 messages=[{'role': 'user', 'content': retry_prompt}],
-                temperature=1.0,
+                thinking={'type': 'disabled'},
                 max_tokens=btn_max_tokens,
             )
-            retry_result = retry_resp.content[0].text.strip()
+            retry_result = next(
+                (b.text for b in retry_resp.content if getattr(b, 'type', '') == 'text'), ''
+            ).strip()
 
             # ── Output gate on retry too ────────────────────────────────────────
             if _has_character_break(retry_result):
@@ -1512,12 +1400,19 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
         if was_rewritten:
             logger.info(f"Dedup rewrite applied — user:{user_id} intent:{button_intent}")
 
-        # ── Step 3.6: Semantic uniqueness — catches repeated MEANING/STRUCTURE ──
-        # even when the literal wording differs ("I keep replaying" vs "I keep
-        # catching myself"). Runs after the n-gram pass, on whatever text survived it.
-        result, was_semantic_rewritten = dedupe_semantic(get_anthropic_client(), user_id, result)
-        if was_semantic_rewritten:
-            logger.info(f"Semantic dedup rewrite applied — user:{user_id} intent:{button_intent}")
+        # ── Step 3.6: Near-duplicate check — pg_trgm trigram similarity ────────
+        # Catches heavy rewordings the 4-gram pass misses. Pure Postgres,
+        # no external API dependency.
+        result, was_sim_rewritten = dedupe_similar(get_anthropic_client(), user_id, result)
+        if was_sim_rewritten:
+            logger.info(f"Similarity rewrite applied — user:{user_id} intent:{button_intent}")
+
+        # ── Step 3.7: Question-tail uniqueness ──────────────────────────────────
+        # The final question is where customers notice repetition first —
+        # identical tails were shipping under different buttons.
+        result, was_tail_rewritten = dedupe_question_tail(get_anthropic_client(), user_id, result)
+        if was_tail_rewritten:
+            logger.info(f"Question-tail rewrite applied — user:{user_id} intent:{button_intent}")
 
         # ── Step 4: Update Redis session ───────────────────────────────────
         theme = extract_theme(result)
@@ -1577,18 +1472,31 @@ def enforce_130_chars(text: str) -> str:
 
 
 def ensure_ends_with_question(text: str, max_chars: int = 150) -> str:
+    """
+    Restore a missing question mark ONLY when the last sentence is genuinely
+    interrogative (starts with a question word/auxiliary) and just lost its
+    mark to truncation or model sloppiness.
+
+    It must NEVER convert a statement into a "question" by swapping the final
+    period for '?' — that manufactured exactly the fake-question artifacts
+    seen in production ("That's terrible timing?", "Then that sudden stop?").
+    A reply whose last sentence is not a real question is returned unchanged,
+    so the _is_genuine_question gate fails and the caller retries/rescues.
+    """
     text = text.strip()
     if not text:
-        return "What does that do to you?"
+        return text
     if text.endswith('?'):
         return text
-    if text.endswith('.'):
-        candidate = text[:-1] + '?'
-    elif text[-1].isalnum():
-        candidate = text + '?'
-    else:
-        # Ends with !, ;, :, or other non-question punctuation — strip and re-add ?
-        candidate = text.rstrip('.,!;: ') + '?'
+
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    last = sentences[-1].strip() if sentences else text
+    words = last.split()
+    first = words[0].lower().rstrip('?.,!') if words else ''
+    if first not in _QUESTION_STARTERS:
+        return text  # statement — leave it; the question gate will force a regen
+
+    candidate = text.rstrip('.,!;: ') + '?'
     if len(candidate) > max_chars:
         truncated = candidate[:max_chars]
         last_space = truncated.rfind(' ')
@@ -1604,6 +1512,14 @@ _REFUSAL_MARKERS = (
     "not able to", "i'd prefer not", "i must decline", "i cannot write",
     "i can't write", "i won't write", "generating this content",
     "this request", "i need to respectfully",
+    # Observed in production output (Mysamples.md) — refusals that slipped through:
+    "i need to stop", "i need to pause", "i can't participate",
+    "i cannot participate", "i'm genuinely concerned", "i am genuinely concerned",
+    "crisis service", "crisis line", "crisis hotline", "988",
+    "suicide", "self-harm", "harming yourself", "reach out to a crisis",
+    "i want to be direct about why", "i can't meet you in person",
+    "outside what i can", "outside what we", "outside what with",
+    "what i *can* do", "what i can do:",
 )
 
 
@@ -1632,8 +1548,19 @@ _CHARACTER_BREAK_PATTERN = re.compile(
     r'|\bAs\s+an\s+AI\b'
     r'|\bI\'m\s+not\s+a\s+real\s+woman\b'
     r'|\bI\s+cannot\s+(?:pretend|impersonate|continue\s+this)\b'
-    r'|\b(?:that\'?s|this\s+is)\s+outside\s+what\s+I\s+(?:can|do|will)\b'
-    r'|\bwhat\s+I\s+\*?can\*?\s+do\s+(?:is|instead)\b',
+    r'|\b(?:that\'?s|this\s+is)\s+outside\s+what\b'
+    r'|\bwhat\s+I\s+\*?can\*?\s+do\s+(?:is|instead)\b'
+    # Observed in production output (Mysamples.md):
+    r'|\bI(?:\'m|\s+am)\s+genuinely\s+concerned\b'
+    r'|\bcrisis\s+(?:service|line|hotline)\b'
+    r'|\b988\b'
+    r'|\b(?:suicide|self[- ]harm|harming\s+yourself)\b'
+    r'|\byour\s+life\s+matters\b'
+    r'|\bI\s+can(?:\'t|not)\s+(?:write|send|craft)\s+this\s+message\b'
+    r'|\bI\s+can(?:\'t|not)\s+meet\s+you\s+in\s+person\s+or\s+suggest\b'
+    r'|\bshows\s+a\s+pattern\s+I\s+can(?:\'t|not)\b'
+    r'|\bthe\s+man\s+is\s+using\s+(?:repetitive|scripted)\b'
+    r'|\busing\s+pressure\b.{0,20}\bas\s+a\s+tactic\b',
     re.IGNORECASE,
 )
 
@@ -1752,6 +1679,64 @@ _MALE_ANATOMY_PATTERNS = re.compile(
 
 def _has_male_anatomy_language(text: str) -> bool:
     return bool(_MALE_ANATOMY_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Day/time mention detector — the prompts say "never name the day or time",
+# but only code makes that stick. Catches weekday names and literal clock
+# anchors in HER reply ("Friday night", "midnight", "9 o'clock").
+# Generic words like "tonight"/"morning" are allowed — they read naturally.
+# ---------------------------------------------------------------------------
+
+_TIME_MENTION_PATTERNS = re.compile(
+    r'\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b'
+    r'|\bmidnight\b'
+    r'|\b\d{1,2}\s*(?:am|pm|o\'?clock)\b',
+    re.IGNORECASE,
+)
+
+
+def _has_time_mention(text: str) -> bool:
+    return bool(_TIME_MENTION_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Logistics leak detector — catches HER volunteering meeting logistics:
+# cities, distances, drive times, "if I showed up at your door", "meet you".
+# Observed in production ("I'm in Portland... two hours away?",
+# "How long of a drive is it from Muir to Greenville?") — the reply itself
+# was pushing the meeting the system exists to deflect.
+# ---------------------------------------------------------------------------
+
+_LOGISTICS_LEAK_PATTERNS = re.compile(
+    r'\bhow\s+(?:far|long\s+of\s+a\s+drive|many\s+(?:hours|miles|minutes))\b'
+    r'|\b(?:hours?|miles?|minutes?)\s+(?:away|apart|from\s+(?:me|you|here))\b'
+    r'|\bI\s+live\s+(?:in|near)\b'
+    r'|\bin\s+your\s+city\b'
+    r'|\b(?:meet|meeting)\s+(?:you|up|somewhere|anywhere|in\s+person)\b'
+    r'|\bcome\s+over\b|\bcame\s+over\b|\bcome\s+to\s+(?:your|my)\b'
+    r'|\b(?:showed?|show)\s+up\s+at\s+your\s+(?:door|place|house)\b'
+    r'|\bsnuck\s+over\b|\bwalked?\s+through\s+your\s+door\b'
+    r'|\b(?:your|my)\s+(?:place|house|address|apartment)\b'
+    r'|\bthe\s+drive\s+(?:to|from|is)\b'
+    r'|\bpick\s+(?:me|you)\s+up\b',
+    re.IGNORECASE,
+)
+
+# Case-SENSITIVE on purpose: "I'm in Portland" / "I work at Boeing" leak a
+# location; "I'm in bed" must pass. (Under re.IGNORECASE the [A-Z] class
+# would match lowercase letters too, so this lives in its own pattern.)
+_LOGISTICS_PLACE_PATTERNS = re.compile(
+    r'\bI(?:\'m|\s+am)\s+(?:in|from|near)\s+[A-Z][a-z]{2,}\b'
+    r'|\bI\s+work\s+(?:in|at)\s+[A-Z]'
+)
+
+
+def _has_logistics_leak(text: str) -> bool:
+    return bool(
+        _LOGISTICS_LEAK_PATTERNS.search(text)
+        or _LOGISTICS_PLACE_PATTERNS.search(text)
+    )
 
 
 # ---------------------------------------------------------------------------

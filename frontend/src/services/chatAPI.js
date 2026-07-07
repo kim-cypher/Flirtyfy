@@ -19,10 +19,7 @@ const VALID_BUTTON_IDS = [
   // Row 5 — Personal & Deep
   'his_exes', 'secrets', 'long_without', 'bdsm_talk', 'kinky_at_work',
   // Row 6 — Sexual Escalation
-  'bedroom_questions', 'positions', 'bedtime_fantasies', 'toy_play', 'fetishes',
-  // Row 7 — Personality & Connection
-  'daily_routine', 'hobbies_interests', 'values_beliefs', 'imagined_fantasy',
-  'sensory_storytelling', 'future_dreams', 'shared_interests', 'food_cooking', 'emotional_checkin',
+  'sensual_echo', 'bedroom_questions', 'positions', 'bedtime_fantasies', 'toy_play', 'fetishes',
 ];
 
 /**
@@ -131,17 +128,6 @@ export const getAvailableButtons = () => [
   { id: 'bedtime_fantasies',    emoji: '🌜', shortLabel: 'Bedtime',      row: 6, description: 'Unguarded hour — what you think about in the dark' },
   { id: 'toy_play',             emoji: '🎲', shortLabel: 'Toys',         row: 6, description: 'What you use, what you want him to use' },
   { id: 'fetishes',             emoji: '🎭', shortLabel: 'Fetishes',     row: 6, description: 'The specific edge where your desire gets interesting' },
-
-  // ── Row 7 — Personality & Connection (below divider) ─────────────────────
-  { id: 'daily_routine',      emoji: '☀️', shortLabel: 'Daily Life',  row: 7, description: 'The unguarded texture of how he actually spends his days' },
-  { id: 'hobbies_interests',  emoji: '🎨', shortLabel: 'Hobbies',     row: 7, description: 'What absorbs him completely when no one he needs to impress is watching' },
-  { id: 'values_beliefs',     emoji: '🧭', shortLabel: 'Values',      row: 7, description: 'What he stands by when it actually costs him something' },
-  { id: 'imagined_fantasy',   emoji: '🌌', shortLabel: 'Sensory Imagination', row: 7, description: 'A sensory imagined scene — somewhere unreal, warm, vivid' },
-  { id: 'sensory_storytelling', emoji: '🌸', shortLabel: 'Sensory',     row: 7, description: 'A vivid sensory moment — scent, sound, taste, texture — that pulls him in' },
-  { id: 'future_dreams',        emoji: '🌠', shortLabel: 'Future',      row: 7, description: 'The dreams and plans that show what he is actually motivated by' },
-  { id: 'shared_interests',     emoji: '🎬', shortLabel: 'Shared Tastes', row: 7, description: 'Music, books, film — finding the real cultural overlap between you' },
-  { id: 'food_cooking',         emoji: '🍲', shortLabel: 'Food & Cook', row: 7, description: 'Taste and memory — what he cooks, craves, and grew up on' },
-  { id: 'emotional_checkin',    emoji: '💛', shortLabel: 'Check-In',    row: 7, description: 'A genuine check-in on how he is actually doing' },
 ];
 
 const chatAPI = { generateSpecificResponse, generateButtonResponse, getAvailableButtons };
