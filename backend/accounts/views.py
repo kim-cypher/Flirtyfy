@@ -26,7 +26,7 @@ from .throttles import (
 )
 from django.core.cache import cache
 from django.conf import settings
-from .novelty_models import AIReply, ConversationUpload
+from .novelty_models import AIReply, AIReplyFeedback, ConversationUpload
 from .models import Notification, Payment
 
 _safety = SafetyFilter()
@@ -71,6 +71,19 @@ def _is_duplicate(user, text: str) -> tuple:
     return False, ''
 
 
+# Max new accounts per IP per rolling day. With WELCOME_CLICKS=5, farming
+# free clicks now requires a new network per 3 accounts — more effort than
+# the ~15 free clicks are worth.
+_SIGNUPS_PER_IP_PER_DAY = 3
+
+
+def _client_ip(request) -> str:
+    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', 'unknown')
+
+
 class RegisterView(APIView):
     """
     User Registration Endpoint
@@ -79,11 +92,28 @@ class RegisterView(APIView):
     throttle_classes = [RegisterThrottle]
 
     def post(self, request):
+        ip = _client_ip(request)
+        ip_key = f'signup_ip_{ip}'
+        try:
+            signup_count = int(cache.get(ip_key) or 0)
+        except Exception:
+            signup_count = 0
+        if signup_count >= _SIGNUPS_PER_IP_PER_DAY:
+            logger.warning(f"Signup cap hit for IP {ip}")
+            return Response(
+                {'message': 'Too many new accounts from this network today. Please try again tomorrow.'},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
             token = Token.objects.create(user=user)
-            logger.info(f"User registered: {user.username} ({user.id})")
+            try:
+                cache.set(ip_key, signup_count + 1, 86400)
+            except Exception:
+                pass
+            logger.info(f"User registered: {user.username} ({user.id}) from {ip}")
             return Response({
                 'token': token.key,
                 'user': UserSerializer(user).data,
@@ -244,6 +274,7 @@ class GenerateSpecificResponseView(APIView):
                 pass
 
             # Save to DB for dedup tracking
+            saved_reply_id = None
             try:
                 upload = ConversationUpload.objects.create(
                     user=request.user,
@@ -267,6 +298,7 @@ class GenerateSpecificResponseView(APIView):
                     delivered_text=response_text,
                     conversation_fingerprint=conv_fp,
                 )
+                saved_reply_id = reply.id
                 # Near-duplicate detection is synchronous now (pg_trgm in
                 # dedup.dedupe_similar) — no background embedding task needed.
             except Exception as db_error:
@@ -277,6 +309,7 @@ class GenerateSpecificResponseView(APIView):
             return Response({
                 'success': True,
                 'response': response_text,
+                'reply_id': saved_reply_id,
                 'intent': intent_data,
                 'message': 'Response generated successfully!',
             }, status=HTTP_200_OK)
@@ -357,6 +390,7 @@ class GenerateButtonResponseView(APIView):
                 status_val = 'fallback'
 
             # Save to DB — fingerprint the actual response text for future dedup
+            saved_reply_id = None
             try:
                 upload = ConversationUpload.objects.create(
                     user=request.user,
@@ -379,6 +413,7 @@ class GenerateButtonResponseView(APIView):
                     button_intent=button_intent,
                     delivered_text=response_text,
                 )
+                saved_reply_id = reply.id
                 # Near-duplicate detection is synchronous now (pg_trgm in
                 # dedup.dedupe_similar) — no background embedding task needed.
             except Exception as db_error:
@@ -389,6 +424,7 @@ class GenerateButtonResponseView(APIView):
             return Response({
                 'success': True,
                 'response': response_text,
+                'reply_id': saved_reply_id,
                 'theme': theme,
                 'message': 'Response generated successfully!',
             }, status=HTTP_200_OK)
@@ -396,6 +432,41 @@ class GenerateButtonResponseView(APIView):
         except Exception as e:
             logger.error(f"Error in GenerateButtonResponseView: {e}")
             return Response({'success': False, 'message': f'Server error: {e}'}, status=HTTP_400_BAD_REQUEST)
+
+
+class ReplyFeedbackView(APIView):
+    """
+    User rating for a delivered reply — the human side of the quality loop.
+    POST /api/chat/feedback/  {reply_id, rating: excellent|good|bad}
+
+    One rating per user per reply (re-rating overwrites). Stored on
+    AIReplyFeedback.reason so weekly reviews can join user ratings against
+    judge scores and delivered text.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    RATINGS = ('excellent', 'good', 'bad')
+
+    def post(self, request):
+        rating = str(request.data.get('rating', '')).strip().lower()
+        if rating not in self.RATINGS:
+            return Response(
+                {'success': False, 'message': 'Rating must be excellent, good, or bad.'},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        try:
+            reply = AIReply.objects.get(id=int(request.data.get('reply_id')), user=request.user)
+        except (AIReply.DoesNotExist, TypeError, ValueError):
+            return Response(
+                {'success': False, 'message': 'Reply not found.'},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+        AIReplyFeedback.objects.update_or_create(
+            user=request.user, reply=reply, defaults={'reason': rating},
+        )
+        return Response({'success': True, 'message': 'Thanks for the feedback!'}, status=HTTP_200_OK)
 
 
 class CreditsView(APIView):

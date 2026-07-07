@@ -28,7 +28,10 @@ from .notifications import create_notification
 
 logger = logging.getLogger(__name__)
 
-WELCOME_CLICKS = 15
+# Deliberately small: a fresh account is a taste, not a supply. Combined with
+# the per-IP signup cap and disposable-email blocking (see RegisterView /
+# RegisterSerializer), farming fake accounts costs more than it yields.
+WELCOME_CLICKS = 5
 REFERRAL_BONUS_CLICKS = 30
 REFERRAL_BONUS_EXPIRY_DAYS = 7
 LOW_CLICKS_THRESHOLD = 3

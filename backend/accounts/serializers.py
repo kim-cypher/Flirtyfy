@@ -1,3 +1,5 @@
+import socket
+
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth import password_validation
@@ -7,6 +9,31 @@ from django.core.exceptions import MultipleObjectsReturned
 from datetime import date
 
 from .models import UserProfile
+
+
+# Well-known disposable/temporary email providers — the cheap route to
+# farming free clicks with throwaway accounts.
+_DISPOSABLE_DOMAINS = frozenset([
+    'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com',
+    'temp-mail.org', 'yopmail.com', 'trashmail.com', 'sharklasers.com',
+    'getnada.com', 'maildrop.cc', 'dispostable.com', 'fakeinbox.com',
+    'mintemail.com', 'throwawaymail.com', 'mailnesia.com', 'tempail.com',
+    'moakt.com', 'emailondeck.com', 'mohmal.com', 'tmpmail.net',
+    'burnermail.io', 'mytemp.email', 'tempinbox.com', 'spam4.me',
+])
+
+
+def _email_domain_resolves(domain: str) -> bool:
+    """True if the email's domain actually exists in DNS. Catches typo'd and
+    fabricated domains ('user@asdfgh.xyz'). On DNS infrastructure errors we
+    let the user through — never block a real signup on our own hiccup."""
+    try:
+        socket.getaddrinfo(domain, None)
+        return True
+    except socket.gaierror:
+        return False
+    except Exception:
+        return True
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -28,17 +55,33 @@ class RegisterSerializer(serializers.ModelSerializer):
                 "password": ["Passwords do not match."]
             })
 
+
         try:
             password_validation.validate_password(data['password'])
         except DjangoValidationError as e:
             raise serializers.ValidationError({"password": list(e.messages)})
 
-        # Check if email already exists (case-insensitive — Bob@x.com and
-        # bob@x.com are the same account as far as login/reset are concerned)
-        email = data.get('email')
+        # Normalize email
+        email = (data.get('email') or '').strip().lower()
+        data['email'] = email
+
+
+        # Check if email already exists (case-insensitive)
         if User.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError({
                 "email": ["A user with this email already exists."]
+            })
+
+        # Email must look real: no disposable providers, and the domain must
+        # actually exist in DNS. (Format is already enforced by EmailField.)
+        domain = email.rsplit('@', 1)[-1]
+        if domain in _DISPOSABLE_DOMAINS:
+            raise serializers.ValidationError({
+                "email": "Disposable email addresses are not allowed — please use your real email."
+            })
+        if not _email_domain_resolves(domain):
+            raise serializers.ValidationError({
+                "email": "This email domain does not exist — please check for typos."
             })
 
         # Check age is 18+

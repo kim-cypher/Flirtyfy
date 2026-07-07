@@ -51,9 +51,13 @@ class Command(BaseCommand):
 
         for r in rows:
             self.stdout.write('-' * 70)
+            fb = r.feedbacks.order_by('-created_at').first()
             self.stdout.write(
                 f"id:{r.id}  user:{r.user_id}  type:{r.intent_type}  "
-                f"button:{r.button_intent or '-'}  status:{r.status}  created:{r.created_at}"
+                f"button:{r.button_intent or '-'}  status:{r.status}  "
+                f"user-rating:{fb.reason if fb else '-'}  "
+                f"judge:{r.quality_score if r.quality_score is not None else '-'}  "
+                f"created:{r.created_at}"
             )
             text = r.delivered_text or r.normalized_text or ''
             if not options['full']:

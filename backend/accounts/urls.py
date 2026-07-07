@@ -1,8 +1,17 @@
 from django.urls import path
 from .views import (
-    RegisterView, LoginView, PasswordResetView, GenerateSpecificResponseView, GenerateButtonResponseView,
-    CreditsView, NotificationListView, NotificationMarkReadView,
-    InitiatePaymentView, PaymentStatusView, MpesaCallbackView,
+    RegisterView,
+    LoginView,
+    PasswordResetView,
+    GenerateSpecificResponseView,
+    GenerateButtonResponseView,
+    ReplyFeedbackView,
+    CreditsView,
+    NotificationListView,
+    NotificationMarkReadView,
+    InitiatePaymentView,
+    PaymentStatusView,
+    MpesaCallbackView,
 )
 from .health_check import health_basic, health_detailed, metrics, check_system_resources
 
@@ -18,6 +27,7 @@ urlpatterns = [
 
     path('chat/generate-specific/', GenerateSpecificResponseView.as_view(), name='generate-specific'),
     path('chat/generate-button/', GenerateButtonResponseView.as_view(), name='generate-button'),
+    path('chat/feedback/', ReplyFeedbackView.as_view(), name='reply-feedback'),
 
     path('credits/', CreditsView.as_view(), name='credits'),
 
