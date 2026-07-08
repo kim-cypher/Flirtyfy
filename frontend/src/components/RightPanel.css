@@ -165,3 +165,30 @@
   .scenario-button { min-height: 50px; padding: 9px 6px; }
   .button-label    { font-size: 12px; }
 }
+
+/* ── Update-time control (next to Quick Scenarios title) ──────────────── */
+.right-panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.update-time-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.update-time-btn:hover {
+  border-color: #c084fc;
+  color: #c084fc;
+  transform: translateY(-1px);
+}

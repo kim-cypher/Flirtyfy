@@ -384,10 +384,19 @@ class GenerateButtonResponseView(APIView):
                 logger.info(f"Duplicate ({dup_reason}) on attempt {attempt + 1} for user {request.user.id}, retrying...")
 
             if response_text is None:
-                # All 3 attempts were duplicates — use last one as fallback
-                response_text = last_result.get('response', '')
-                theme = last_result.get('theme', '')
-                status_val = 'fallback'
+                # All attempts were near-duplicates. On the target dating platform
+                # a repeated message can get the user's account BANNED, so we must
+                # NOT ship a known duplicate. Refuse cleanly, do NOT charge the
+                # click, and ask them to tap again (rotation will land elsewhere).
+                logger.warning(
+                    f"Button all-duplicate for user {request.user.id} intent {button_intent} — refusing to ship"
+                )
+                return Response(
+                    {'success': False,
+                     'message': 'Give it another tap — crafting something fresh for you.',
+                     'retry': True},
+                    status=HTTP_200_OK,
+                )
 
             # Save to DB — fingerprint the actual response text for future dedup
             saved_reply_id = None

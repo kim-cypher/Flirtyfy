@@ -7,7 +7,7 @@ import OutputArea from './OutputArea';
 import { generateSpecificResponse, generateButtonResponse } from '../services/chatAPI';
 import './ChatInterface.css';
 
-function ChatInterface({ user, token, timeSlot }) {
+function ChatInterface({ user, token, timeSlot, onOpenTimeModal }) {
   const navigate = useNavigate();
   const [leftResponse, setLeftResponse] = useState('');
   const [leftReplyId, setLeftReplyId] = useState(null);
@@ -92,6 +92,7 @@ function ChatInterface({ user, token, timeSlot }) {
             onButtonClick={handleRightButtonClick}
             loading={rightLoading}
             loadingButton={rightLoadingButton}
+            onOpenTimeModal={onOpenTimeModal}
           />
           
           <div className="output-wrapper">
@@ -116,12 +117,14 @@ ChatInterface.propTypes = {
   }),
   token: PropTypes.string,
   timeSlot: PropTypes.string,
+  onOpenTimeModal: PropTypes.func,
 };
 
 ChatInterface.defaultProps = {
   user: null,
   token: null,
   timeSlot: null,
+  onOpenTimeModal: () => {},
 };
 
 export default ChatInterface;

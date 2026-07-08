@@ -8,7 +8,7 @@ import PropTypes from 'prop-types';
 import { getAvailableButtons } from '../services/chatAPI';
 import './RightPanel.css';
 
-function RightPanel({ onButtonClick, loading, loadingButton }) {
+function RightPanel({ onButtonClick, loading, loadingButton, onOpenTimeModal }) {
   const [error, setError] = useState('');
   const allButtons = getAvailableButtons();
   const mainButtons  = allButtons.filter(b => b.row < 7);
@@ -27,7 +27,17 @@ function RightPanel({ onButtonClick, loading, loadingButton }) {
     <div className="right-panel">
       <div className="right-panel-container">
         <div className="right-panel-header">
-          <h2 className="right-panel-title">Quick Scenarios</h2>
+          <div className="right-panel-title-row">
+            <h2 className="right-panel-title">Quick Scenarios</h2>
+            <button
+              type="button"
+              className="update-time-btn"
+              onClick={onOpenTimeModal}
+              title="Change the time of day used for tone"
+            >
+              🕐 Update time
+            </button>
+          </div>
           <p className="right-panel-subtitle">Stuck? Insisting to meet? Click the buttons. Happy Flirting!</p>
         </div>
 
@@ -91,11 +101,13 @@ RightPanel.propTypes = {
   onButtonClick: PropTypes.func.isRequired,
   loading: PropTypes.bool,
   loadingButton: PropTypes.string,
+  onOpenTimeModal: PropTypes.func,
 };
 
 RightPanel.defaultProps = {
   loading: false,
   loadingButton: null,
+  onOpenTimeModal: () => {},
 };
 
 export default RightPanel;

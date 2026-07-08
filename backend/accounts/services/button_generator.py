@@ -436,12 +436,13 @@ BUTTON_INTENTS = {
         'name': '✨ New Match',
         'row': 1,
         'prompt': (
-            "A brand-new match — nothing has happened yet except that he caught her attention. "
-            "She makes HIM feel singled out: something light and true about why she stopped at him "
-            "instead of scrolling past, said with warmth, not flattery. "
+            "A brand-new match — nothing has happened yet except that something in how he "
+            "writes caught her interest. She makes HIM feel singled out: one light, true thing "
+            "about what made her want to reply to him specifically, said with warmth, not flattery. "
+            "Base it on his WORDS and energy only — she has never seen his photos or face, so never "
+            "mention pictures, looks, or 'scrolling'. "
             "Her question is easy and fun to answer, about who he is — the kind of first question "
-            "that makes a man think 'she is different' and reply within the minute. "
-            "Keep it simple, light, and welcoming. No intensity, no heavy desire."
+            "that makes a man think 'she is different'. Keep it simple, light, welcoming. No heavy desire."
         ),
     },
     'dead': {
@@ -1240,6 +1241,26 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             f"If the last reply was explicit, go emotional. If emotional, go playful. Force real contrast."
         )
 
+    # Recent-outputs avoid-list — the buttons used to see only coarse THEME
+    # tags, so the model kept reusing the same opening ("I was scrolling…",
+    # "my <body part> reading that…"). Showing it the actual recent messages,
+    # and their opening structures explicitly, is what makes every click feel
+    # new. Pure DB read (indexed) — negligible cost.
+    recent = get_recent_user_texts(user_id)[:5]
+    if recent:
+        recent_openers = {_opener_signature(t) for t in recent if t}
+        user_prompt += (
+            "\n\nHer OWN recent messages — your reply must not resemble any of them in "
+            "opening words, sentence shape, imagery, or question:\n"
+            + "\n".join(f"- {t}" for t in recent)
+        )
+        if recent_openers:
+            user_prompt += (
+                "\nShe has recently opened messages with these structures — open in a "
+                "completely different way this time, do not start with the same idea:\n"
+                + "; ".join(sorted(recent_openers))
+            )
+
     # Temporal context: mood + overlay only. Never pass the literal day name
     # or time label — when the prompt said "It is Friday, late night", the
     # model NAMED the day/time in output ("Friday night", "midnight").
@@ -1323,10 +1344,11 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 or not _has_two_sentences(t)
                 or _has_contact_leak(t)
                 or _has_physical_reality_intrusion(t)
+                or _has_perception_leak(t)
+                or _has_meeting_fantasy(t)
                 or _has_male_anatomy_language(t)
                 or _has_formula_phrase(t)
                 or _has_temporal_leak(t)
-
                 or _has_time_mention(t)
                 or _has_logistics_leak(t)
             )
@@ -1632,13 +1654,28 @@ def _has_contact_leak(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _TEMPORAL_LEAK_PATTERNS = re.compile(
+    # Weekdays + weekend/weekday
     r'\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b'
-    r'|\bweekends?\b'
-    r'|\bweekdays?\b'
-    r'|\btonight\b'
-    r'|\blast\s+night\b'
-    r'|\bthis\s+(?:morning|afternoon|evening)\b'
-    r'|\bit.?s\s+(?:late|early)\b',
+    r'|\bweekends?\b|\bweekdays?\b'
+    # Named parts of day pinned to "this/mid/last/tonight"
+    r'|\btonight\b|\blast\s+night\b|\btomorrow\s+night\b'
+    r'|\bthis\s+(?:morning|afternoon|evening|noon)\b'
+    r'|\bmid[\s-]?(?:morning|afternoon|evening|day)\b'
+    # Relative days
+    r'|\btomorrow\b|\byesterday\b|\bthe\s+other\s+(?:day|night|morning)\b'
+    r'|\b(?:earlier|later)\s+(?:today|tonight|this)\b'
+    r'|\ball\s+(?:day|morning|afternoon|evening|night)\b'
+    # Clock / absolute time
+    r'|\bmidnight\b|\bnoon\b|\bmidday\b'
+    r'|\bdawn\b|\bdusk\b|\bsunrise\b|\bsunset\b|\bdaybreak\b'
+    r'|\b\d{1,2}\s*(?:am|pm|o\'?clock)\b|\b\d{1,2}\s*(?:in\s+the\s+(?:morning|afternoon|evening))\b'
+    r'|\bhalf\s+past\b|\bquarter\s+(?:past|to)\b'
+    r'|\bit.?s\s+(?:late|early)\b|\bwhat\s+day\s+it\s+is\b'
+    # Calendar: months, seasons, holidays
+    r'|\b(?:january|february|march|april|june|july|august|september|october|november|december)\b'
+    r'|\b(?:spring|summer|autumn|winter)\b'
+    r'|\b(?:christmas|new\s+year|valentine|thanksgiving|easter|halloween)\b'
+    r'|\bthis\s+(?:week|weekend|month)\b|\bnext\s+(?:week|weekend|month)\b',
     re.IGNORECASE,
 )
 
@@ -1648,28 +1685,139 @@ def _has_temporal_leak(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Physical reality intrusion detector
-# Catches AI inventing shared co-presence: same room, bar, workplace, eye contact.
-# The woman's own physical state (in bed, in shower, touching herself) is NOT intrusion.
+# Physical reality intrusion detector — MET / shared-past claims only.
+#
+# IMPORTANT: this deliberately does NOT flag imagined body contact
+# ("I picture your hands on me", "what your hands would do"). Sexting IS
+# imagining his body — banning that breaks the core product. This gate fires
+# only when the reply claims they have ALREADY met, sat, touched, or shared a
+# real physical space — things two people who have never met cannot have done.
+# Perception (photos/voice/face) and meeting fantasies are separate gates below.
 # ---------------------------------------------------------------------------
 
 _PHYSICAL_REALITY_PATTERNS = re.compile(
     r'\b(at\s+that\s+(bar|restaurant|cafe|coffee\s+shop|party|place|club|event|office))\b'
-    r'|\b(your\s+hand\s+on\s+my|put\s+your\s+hand|your\s+hands\s+on\s+me|touched\s+my\s+\w+)\b'
-    r'|\b(when\s+(we|you)\s+(were|met|sat|stood|walked|danced|looked|kissed|touched))\b'
-    r'|\b(i\s+(watched|saw)\s+you\s+(put|touch|reach|move|look|walk|come|go|turn))\b'
-    r'|\b(last\s+time\s+we|the\s+night\s+we|remember\s+when\s+we|back\s+when\s+we)\b'
+    r'|\b(when\s+(we|you)\s+(met|sat|stood|walked|danced|kissed|hugged))\b'
+    r'|\b(i\s+(watched|saw)\s+you\s+(put|touch|reach|move|walk|come|go|turn|sit|stand))\b'
+    r'|\b(last\s+time\s+we|the\s+night\s+we|remember\s+when\s+we|back\s+when\s+we|the\s+day\s+we)\b'
     r'|\b(across\s+the\s+(room|table|bar|street|desk))\b'
     r'|\b(you\s+walked\s+(in|over|up|past|away))\b'
     r'|\bin\s+that\s+(?:conference|meeting)\s+room\b'
     r'|\byou\s+didn.t\s+look\s+away\b'
-    r'|\bour\s+(?:office|workplace|building|floor|meeting)\b',
+    r'|\bour\s+(?:office|workplace|building|floor|meeting|table|booth)\b',
     re.IGNORECASE,
 )
 
 
 def _has_physical_reality_intrusion(text: str) -> bool:
     return bool(_PHYSICAL_REALITY_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Perception leak detector — the single most damaging class in production.
+# They have NEVER seen or heard each other; she exists for him only in text.
+# Any reply implying she has seen his face/photos or heard his voice destroys
+# the illusion (and on the target platform reads as bot/scam behaviour). These
+# have essentially zero overlap with legitimate sexting, so they are hard bans.
+#   - SEEN him:  photo/picture/pic/selfie/image, his face/grin/smile/eyes/jaw/
+#                dimple/lips-as-seen, "you look", appearance compliments
+#   - HEARD him: his voice/laugh, "you sound", "hearing you"
+#   - SHARED:    "you sent", "you wrote", "the message/text you", "you told me",
+#                referencing a specific remembered past exchange
+# ---------------------------------------------------------------------------
+
+_PERCEPTION_LEAK_PATTERNS = re.compile(
+    # Unambiguous photo nouns (no verb form): photo/pic/selfie/snapshot/headshot.
+    r'\b(?:photo|photos|pic|pics|selfie|selfies|snapshot|headshot)\b'
+    # "picture"/"image" only as a NOUN — after a determiner — so the VERB
+    # "I picture your hands" (imagining, valid sexting) is never flagged.
+    r'|\b(?:a|an|the|that|this|your|his|another|any|send|sent|share|shared|post|posted)\s+(?:picture|pictures|image|images)\b'
+    r'|\byour\s+(?:face|grin|smile|eyes|jaw|dimple|dimples|cheekbones|beard|stubble)\b'
+    r'|\byou\s+look\s+(?:so\s+)?(?:good|great|hot|handsome|cute|gorgeous|sexy|fine|amazing)\b'
+    r'|\b(?:handsome|gorgeous)\s+(?:face|man|smile)\b'
+    r'|\byour\s+(?:voice|laugh|accent|chuckle)\b'
+    r'|\byou\s+sound\s+(?:so\s+)?(?:good|sexy|deep|smooth|amazing|hot)\b'
+    r'|\bhearing\s+you\b'
+    r'|\byou\s+(?:sent|posted|shared)\s+(?:me\s+)?(?:that|a|the|your)\b'
+    r'|\bthat\s+(?:photo|pic|picture|selfie|message|text)\s+you\b'
+    r'|\byou\s+(?:told|wrote|texted)\s+me\s+(?:earlier|before|yesterday|last)\b',
+    re.IGNORECASE,
+)
+
+
+def _has_perception_leak(text: str) -> bool:
+    return bool(_PERCEPTION_LEAK_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Meeting-fantasy detector — imagined co-presence / him coming to her / her
+# going to him. Distinct from imagining his BODY (allowed): this is imagining
+# a shared physical LOCATION or a meeting, which the online-only rule forbids
+# even in fantasy. Complements _has_meeting_push / _has_logistics_leak (which
+# catch literal meeting logistics); this catches the softer roleplay version.
+# ---------------------------------------------------------------------------
+
+_MEETING_FANTASY_PATTERNS = re.compile(
+    r'\bwalk(?:ing|ed)?\s+through\s+(?:my|your|the|that)\s+door\b'
+    r'|\bthrough\s+(?:my|your)\s+door\b'
+    r'|\bshow(?:ed|ing)?\s+up\s+at\s+(?:my|your)\b'
+    r'|\bcome\s+(?:over|through|inside|in)\b|\bcame\s+over\b'
+    r'|\byour\s+leg\s+against\s+mine\b|\bleg\s+pressed\s+against\b'
+    r'|\bsitting\s+(?:there\s+)?(?:with\s+you|next\s+to\s+you|beside\s+you|across\s+from\s+you)\b'
+    r'|\b(?:next\s+to|beside)\s+me\s+right\s+now\b'
+    r'|\bin\s+the\s+same\s+room\b'
+    r'|\bunder\s+the\s+(?:table|covers|sheets)\s+(?:with\s+you|together)\b'
+    r'|\b(?:if|when)\s+you\s+(?:get|come|show\s+up)\s+here\b'
+    r'|\bin\s+your\s+(?:bed|lap|arms)\s+right\s+now\b',
+    re.IGNORECASE,
+)
+
+
+def _has_meeting_fantasy(text: str) -> bool:
+    return bool(_MEETING_FANTASY_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Opener signature — a normalized skeleton of a reply's OPENING, used to catch
+# STRUCTURAL repetition that word-level dedup misses. In production the left
+# panel opened ~10 of 15 explicit replies with "my <body part> <reaction>
+# reading that you..." — every reply read fine alone, but a real man would
+# notice she always starts the same way. Collapsing body parts and reaction
+# verbs to tokens makes "my skin is already answering" and "my stomach drops
+# reading" hash to the same signature, so we can detect and avoid the pattern.
+# ---------------------------------------------------------------------------
+
+_SIG_BODYPARTS = frozenset([
+    'throat', 'skin', 'stomach', 'legs', 'chest', 'spine', 'thighs', 'belly',
+    'breath', 'pulse', 'heart', 'body', 'core', 'knees', 'hips', 'mouth',
+    'lips', 'hands', 'fingers', 'neck', 'cheeks', 'jaw', 'gut', 'blood',
+])
+_SIG_REACTIONS = frozenset([
+    'drops', 'closes', 'goes', 'opens', 'tightens', 'tighten', 'clenches',
+    'clench', 'burns', 'burning', 'answering', 'answers', 'still', 'tight',
+    'hums', 'aches', 'aching', 'races', 'racing', 'flutters', 'flutter',
+    'stops', 'catches', 'catch', 'quickens', 'jumps', 'twists', 'curls',
+])
+_SIG_STOP = frozenset(['the', 'a', 'an', 'is', 'are', 'was', 'am', 'just', 'already', 'so', 'that', 'this'])
+
+
+def _opener_signature(text: str) -> str:
+    """First few tokens of a reply, body-parts/reactions collapsed to tokens
+    and filler words dropped, so structurally-identical openers collide."""
+    words = re.sub(r'[^a-z\s]', '', (text or '').lower()).split()
+    sig = []
+    for w in words:
+        if w in _SIG_STOP:
+            continue
+        if w in _SIG_BODYPARTS:
+            sig.append('#b')
+        elif w in _SIG_REACTIONS:
+            sig.append('#r')
+        else:
+            sig.append(w)
+        if len(sig) >= 4:
+            break
+    return ' '.join(sig)
 
 
 # ---------------------------------------------------------------------------

@@ -215,7 +215,12 @@ function Chat() {
 
       {/* Main Chat Interface - Split Screen */}
       <div className="chat-interface-wrapper">
-        <ChatInterface user={user} token={token} timeSlot={timeSlot} />
+        <ChatInterface
+          user={user}
+          token={token}
+          timeSlot={timeSlot}
+          onOpenTimeModal={() => setShowTimeModal(true)}
+        />
       </div>
 
       {/* Time check-in modal — only shown after a manual slot's trusted window elapses */}

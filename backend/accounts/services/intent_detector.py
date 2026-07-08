@@ -19,15 +19,19 @@ from .button_generator import (
     validate_character_voice,
     get_anthropic_client,
     _get_temporal_context,
+    _get_time_slot,
     _is_genuine_question,
     _has_formula_phrase,
     _has_temporal_leak,
     _is_refusal,
     _has_contact_leak,
     _has_physical_reality_intrusion,
+    _has_perception_leak,
+    _has_meeting_fantasy,
     _has_male_anatomy_language,
     _has_time_mention,
     _has_logistics_leak,
+    _opener_signature,
     _CHARACTER_BREAK_PATTERN,
     generate_button_response,
     )
@@ -392,6 +396,43 @@ def _strip_timestamp(line: str) -> str:
     return _TIMESTAMP_RE.sub('', line).strip()
 
 
+# Ground-truth time: messaging apps stamp every message, so the LAST timestamp
+# in a pasted chat is the real "now" of the exchange. Reading it means the
+# reply's mood matches when the man is actually texting — no more "it's 9am but
+# the reply feels like midnight". Only lines that also carry a weekday, month,
+# or "ago" marker count, so a time mentioned inside a message ("meet at 8:47")
+# never fools it.
+_CONV_TIME_RE = re.compile(r'\b(\d{1,2}):(\d{2})\s*(?:([AaPp])[Mm])?')
+_TS_LINE_MARKERS = re.compile(
+    r'\bago\b'
+    r'|\b(?:mon|tue|wed|thu|fri|sat|sun)\w*\b'
+    r'|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\b'
+    r'|\bstarted\s+at\b|\d{1,2}\s*[|]\s*\d{1,2}[:.]',
+    re.IGNORECASE,
+)
+
+
+def _infer_time_slot_from_conversation(conversation: str):
+    """Slot id (e.g. 'morning') from the latest timestamp in the chat, or None."""
+    last_hour = None
+    for line in conversation.split('\n'):
+        if not _TS_LINE_MARKERS.search(line):
+            continue
+        matches = list(_CONV_TIME_RE.finditer(line))
+        if not matches:
+            continue
+        m = matches[-1]  # rightmost time (woman's local when dual-stamped)
+        hour = int(m.group(1))
+        ampm = (m.group(3) or '').lower()
+        if ampm == 'p' and hour != 12:
+            hour += 12
+        elif ampm == 'a' and hour == 12:
+            hour = 0
+        if 0 <= hour <= 23:
+            last_hour = hour
+    return _get_time_slot(last_hour) if last_hour is not None else None
+
+
 # Explicit speaker prefixes → transcript role. When present, they override
 # the alternation heuristic.
 _HIM_PREFIXES = frozenset(['him', 'he', 'man', 'guy', 'user'])
@@ -512,13 +553,17 @@ def _reply_violations(text: str) -> list:
     if _has_contact_leak(text):
         v.append('mentions calling / hearing his voice')
     if _has_physical_reality_intrusion(text):
-        v.append('references a shared physical memory or place — you have never met')
+        v.append('claims you already met, sat, or touched — you have never met in person')
+    if _has_perception_leak(text):
+        v.append('references seeing his photo/face or hearing his voice — you have never seen or heard him')
+    if _has_meeting_fantasy(text):
+        v.append('imagines being physically together / him coming over — stay online-only, imagine him but never a shared place')
     if _has_male_anatomy_language(text):
         v.append('uses male arousal language for her body')
     if _has_time_mention(text):
         v.append('names a day of the week or clock time')
     if _has_temporal_leak(text):
-        v.append('references a specific day/time (tonight, this morning, weekend, it is late)')
+        v.append('references a specific day/time (tonight, mid-afternoon, tomorrow, weekend, it is late)')
     if _has_logistics_leak(text):
         v.append('mentions meeting, distance, travel, cities, or locations')
     return v
@@ -896,6 +941,14 @@ def generate_context_aware_response(
 
     if intent_data is None:
         intent_data = detect_intent(conversation)
+
+    # Ground-truth time: prefer the real time from the conversation's own
+    # timestamps over the browser/manual slot, so the reply's mood matches when
+    # the exchange is actually happening. Falls back to the passed slot if the
+    # paste has no readable timestamps.
+    inferred_slot = _infer_time_slot_from_conversation(conversation)
+    if inferred_slot:
+        time_slot = inferred_slot
 
     # Trim to last 1500 chars — signal is in recent messages
     if len(conversation) > 1500:
