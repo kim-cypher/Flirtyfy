@@ -517,6 +517,8 @@ def _reply_violations(text: str) -> list:
         v.append('uses male arousal language for her body')
     if _has_time_mention(text):
         v.append('names a day of the week or clock time')
+    if _has_temporal_leak(text):
+        v.append('references a specific day/time (tonight, this morning, weekend, it is late)')
     if _has_logistics_leak(text):
         v.append('mentions meeting, distance, travel, cities, or locations')
     return v
@@ -1030,21 +1032,11 @@ def generate_context_aware_response(
             logger.warning("Left-panel: character break detected, returning deflection")
             return _deflect(user_id, time_slot)
 
-        result = enforce_char_limit(result, max_chars=max_chars)
-        result = validate_character_voice(result)
-        result = ensure_ends_with_question(result, max_chars=max_chars)
-
-        # Quality gate — retry once if opener is banned, sentence is broken, or question is fake
-        if (
-            _has_banned_opener(result)
-            or not _is_complete(result)
-            or not _is_genuine_question(result)
-            or _has_formula_phrase(result)
-            or _has_temporal_leak(result)
-        ):
         if violations:
             # One corrective retry, telling the model exactly what was wrong.
-
+            # _generate() already applied every gate (via _reply_violations),
+            # so the retry decision is purely violations-based — no need to
+            # re-run individual checks here.
             forced_q_word = random.choice(_FORCED_QUESTION_WORDS)
             logger.info(f"Left-panel retry — violations: {violations}")
             retry_register, retry_result, retry_violations = _generate(
@@ -1066,23 +1058,6 @@ def generate_context_aware_response(
                     f"Left-panel: reply failed gates twice ({retry_violations}), deflecting"
                 )
                 return _deflect(user_id, time_slot)
-
-
-            retry_result = enforce_char_limit(retry_result, max_chars=max_chars)
-            retry_result = validate_character_voice(retry_result)
-            retry_result = ensure_ends_with_question(retry_result, max_chars=max_chars)
-            # Re-check the SAME gates that triggered this retry — previously only
-            # _is_genuine_question was re-checked, so a retry that still had a
-            # banned opener or formula phrase (e.g. "I keep replaying") shipped anyway.
-            if (
-                _is_genuine_question(retry_result)
-                and not _has_banned_opener(retry_result)
-                and not _has_formula_phrase(retry_result)
-                and not _has_temporal_leak(retry_result)
-            ):
-                result = retry_result
-
-        # ── Phrase-level uniqueness — DB-backed, 30-day window ─────────────────
 
         # ── Uniqueness — literal n-gram pass, then trigram similarity pass ────
         if user_id is not None:
