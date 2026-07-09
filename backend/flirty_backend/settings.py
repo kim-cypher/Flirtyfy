@@ -276,13 +276,21 @@ MPESA_CALLBACK_URL = env("MPESA_CALLBACK_URL", default="")
 if MPESA_ENV == "production" and not (MPESA_CONSUMER_KEY and MPESA_PASSKEY and MPESA_CALLBACK_URL):
     print("⚠️ WARNING: MPESA_ENV=production but credentials/callback URL are incomplete")
 
-# Subscription pricing — $10 USD, quoted to M-Pesa in KES (M-Pesa only
-# transacts in KES). The KES amount and click count are both starting
-# assumptions — confirm the real exchange rate and adjust SUBSCRIPTION_CLICKS
-# to taste before going live.
-SUBSCRIPTION_PRICE_USD = 10
-SUBSCRIPTION_PRICE_KES = env.int("SUBSCRIPTION_PRICE_KES", default=1300)
-SUBSCRIPTION_CLICKS = env.int("SUBSCRIPTION_CLICKS", default=200)
+# Purchase plans — M-Pesa transacts only in KES.
+#   topup  : 200 messages for KSh 170 — one-off, does not expire.
+#   weekly : a week of heavy use (1500 messages) for KSh 1200, valid 7 days.
+# Implemented on the existing credit-grant path (grant_credits with an expiry),
+# so no premium-expiry machinery is needed — weekly is simply a large bundle
+# that lapses after 7 days.
+TOPUP_PRICE_KES    = env.int("TOPUP_PRICE_KES",    default=170)
+TOPUP_CLICKS       = env.int("TOPUP_CLICKS",       default=200)
+WEEKLY_PRICE_KES   = env.int("WEEKLY_PRICE_KES",   default=1200)
+WEEKLY_CLICKS      = env.int("WEEKLY_CLICKS",      default=1500)
+WEEKLY_EXPIRY_DAYS = env.int("WEEKLY_EXPIRY_DAYS", default=7)
+
+# Back-compat aliases — older code/UI paths still read these.
+SUBSCRIPTION_PRICE_KES = TOPUP_PRICE_KES
+SUBSCRIPTION_CLICKS = TOPUP_CLICKS
 
 # Django Channels Configuration (for WebSocket support)
 # This connects to your WSL Redis instance

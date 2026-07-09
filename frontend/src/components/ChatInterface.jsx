@@ -49,7 +49,17 @@ function ChatInterface({ user, token, timeSlot, onOpenTimeModal }) {
     setRightReplyId(null);
 
     try {
-      const result = await generateButtonResponse(buttonIntent, timeSlot);
+      // The server refuses to ship a near-duplicate (ban-safety) and returns
+      // { retry: true }. Rather than show the user a message, quietly retry a
+      // couple more times — they just see the spinner a moment longer.
+      let result = await generateButtonResponse(buttonIntent, timeSlot);
+      for (let i = 0; i < 2 && result && result.retry; i += 1) {
+        result = await generateButtonResponse(buttonIntent, timeSlot);
+      }
+      if (result && result.retry) {
+        setRightError('Still working on a fresh one — tap the button once more.');
+        return;
+      }
       setRightResponse(result.response);
       setRightReplyId(result.replyId);
     } catch (error) {

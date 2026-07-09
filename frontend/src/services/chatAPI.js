@@ -66,6 +66,9 @@ export const generateButtonResponse = async (buttonIntent, timeSlot = null) => {
 
   try {
     const response = await apiClient.post('/chat/generate-button/', payload);
+    // Server refused to ship a near-duplicate (ban-safety). Signal a silent
+    // auto-retry rather than surfacing a message to the user.
+    if (response.data.retry) return { retry: true };
     if (!response.data.success) throw new Error(response.data.message || 'Failed to generate response');
     return {
       success: true,

@@ -25,8 +25,8 @@ export const markAllNotificationsRead = async () => {
   return response.data;
 };
 
-export const initiatePayment = async (phoneNumber) => {
-  const response = await apiClient.post('/payments/initiate/', { phone_number: phoneNumber });
+export const initiatePayment = async (phoneNumber, plan = 'topup') => {
+  const response = await apiClient.post('/payments/initiate/', { phone_number: phoneNumber, plan });
   return response.data;
 };
 

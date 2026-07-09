@@ -436,13 +436,13 @@ BUTTON_INTENTS = {
         'name': '✨ New Match',
         'row': 1,
         'prompt': (
-            "A brand-new match — nothing has happened yet except that something in how he "
-            "writes caught her interest. She makes HIM feel singled out: one light, true thing "
-            "about what made her want to reply to him specifically, said with warmth, not flattery. "
-            "Base it on his WORDS and energy only — she has never seen his photos or face, so never "
-            "mention pictures, looks, or 'scrolling'. "
-            "Her question is easy and fun to answer, about who he is — the kind of first question "
-            "that makes a man think 'she is different'. Keep it simple, light, welcoming. No heavy desire."
+            "She reached out first and he has just written back — his reply is her first real read "
+            "on who he is. She responds to something specific in HIS reply that made her want to "
+            "keep going: his energy, his humour, the thing he chose to say. Warm, not flattery. "
+            "Base it on his WORDS only — she has never seen his photos or face, so never mention "
+            "pictures, looks, or scrolling. "
+            "Her question is easy and fun to answer, about who he is — the kind of early question "
+            "that makes a man think 'she is different'. Keep it light, warm, welcoming. No heavy desire."
         ),
     },
     'dead': {
@@ -580,10 +580,12 @@ BUTTON_INTENTS = {
         'name': '🙏 Don\'t Go',
         'row': 3,
         'prompt': (
-            "The conversation is about to end and something real rises in her — "
-            "a specific truth about what he did to her that she was not planning to say out loud. "
-            "She gives it to him: one honest thing he gave her that she has been carrying. "
-            "Her question is the kind that makes him realize he is not quite ready to leave."
+            "He is about to leave or pulling away. She does not argue, beg, or perform love. "
+            "She lets it show that it landed — a little wounded, a little proud, honestly "
+            "disappointed that someone she was starting to hope about might slip away. Warm and "
+            "dignified, never desperate, never a declaration of love. "
+            "Her question gently reopens the door and makes him feel he would be losing something "
+            "real by walking off now. VARY the wound every time — never the same phrasing twice."
         ),
     },
     'wine_stars': {

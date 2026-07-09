@@ -42,6 +42,9 @@ function Account() {
       </nav>
 
       <main className="acct-main">
+        <button type="button" className="acct-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
+          ← Back
+        </button>
         <h1 className="acct-title">Account</h1>
 
         <div className="acct-card">
@@ -62,7 +65,7 @@ function Account() {
           </div>
           {credits && !credits.is_premium && (
             <button type="button" className="acct-subscribe-btn" onClick={() => navigate('/subscribe')}>
-              Subscribe — ${credits.subscription_price_usd} for {credits.subscription_clicks} clicks
+              Get more messages — from KSh {credits.plans?.topup?.price_kes ?? 170}
             </button>
           )}
         </div>

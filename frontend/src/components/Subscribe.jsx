@@ -11,6 +11,7 @@ function Subscribe() {
   const navigate = useNavigate();
   const [phone, setPhone] = useState('');
   const [credits, setCredits] = useState(null);
+  const [plan, setPlan] = useState('weekly'); // 'weekly' | 'topup' — weekly highlighted by default
   const [stage, setStage] = useState('form'); // form | pending | success | failed
   const [error, setError] = useState('');
   const pollRef = useRef(null);
@@ -62,7 +63,7 @@ function Subscribe() {
     }
     setStage('pending');
     try {
-      const data = await initiatePayment(trimmed);
+      const data = await initiatePayment(trimmed, plan);
       if (!data.success) {
         setStage('failed');
         setError(data.message || 'Could not start the payment.');
@@ -99,11 +100,40 @@ function Subscribe() {
 
         {stage === 'form' && (
           <>
-            <h2 className="sub-title">Top up your clicks</h2>
-            <p className="sub-price">
-              ${credits?.subscription_price_usd ?? 10} for {credits?.subscription_clicks ?? 200} clicks
-            </p>
-            <p className="sub-sub">Paid via M-Pesa</p>
+            <h2 className="sub-title">Choose your plan</h2>
+
+            <div className="sub-plans">
+              <button
+                type="button"
+                className={`sub-plan${plan === 'weekly' ? ' sub-plan--active' : ''}`}
+                onClick={() => setPlan('weekly')}
+              >
+                <span className="sub-plan-badge">Best value</span>
+                <span className="sub-plan-name">Weekly</span>
+                <span className="sub-plan-price">
+                  KSh {credits?.plans?.weekly?.price_kes ?? 1200}
+                </span>
+                <span className="sub-plan-desc">
+                  A full week of heavy use — {credits?.plans?.weekly?.clicks ?? 1500} messages, valid 7 days
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className={`sub-plan${plan === 'topup' ? ' sub-plan--active' : ''}`}
+                onClick={() => setPlan('topup')}
+              >
+                <span className="sub-plan-name">Top-up</span>
+                <span className="sub-plan-price">
+                  KSh {credits?.plans?.topup?.price_kes ?? 170}
+                </span>
+                <span className="sub-plan-desc">
+                  {credits?.plans?.topup?.clicks ?? 200} messages — never expires
+                </span>
+              </button>
+            </div>
+
+            <p className="sub-sub">Paid securely via M-Pesa</p>
 
             <form onSubmit={handleSubmit} className="sub-form">
               <label className="sub-label" htmlFor="sub-phone">M-Pesa phone number</label>
@@ -117,7 +147,9 @@ function Subscribe() {
               />
               {error && <p className="sub-error">{error}</p>}
               <button type="submit" className="sub-pay-btn">
-                Pay with M-Pesa
+                Pay KSh {plan === 'weekly'
+                  ? (credits?.plans?.weekly?.price_kes ?? 1200)
+                  : (credits?.plans?.topup?.price_kes ?? 170)} with M-Pesa
               </button>
             </form>
 

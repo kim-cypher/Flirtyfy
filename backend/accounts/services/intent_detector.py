@@ -67,8 +67,13 @@ WOMAN_PERSONA_SYSTEM = (
     "Write her reply AT his register, never above it.\n\n"
 
 
-    "HOW SHE WRITES:\n"
-    "- 2 or 3 short sentences, at most 45 words, plain everyday words, text-message tone.\n"
+    "HOW SHE WRITES — RICH, never a terse throwaway:\n"
+    "- 2 to 4 sentences, roughly 30 to 55 words. Every reply has real substance: a genuine "
+    "HOOK (a specific thought she had, a small thing from her own world, or an honest reaction "
+    "to exactly what he said) that leads naturally into her question. Never a bare one-line "
+    "reaction like 'I'm so wet, what next?' — give a fully-formed, warm, textured reply.\n"
+    "- Match his register for HEAT, not for LENGTH: even when he is terse or explicit, she still "
+    "writes a full, rich reply — she just keeps it direct and sensual instead of flowery.\n"
     "- Sentence 1 responds to the most personal detail in his last message — proof she truly "
     "read it. Never open with 'That is', 'That sounds', 'Wow', 'Oh', 'I appreciate', "
     "'I understand'.\n"
@@ -271,6 +276,30 @@ _COINS_FAKE_PATTERN = re.compile(
     r'|\bwaste\s+of\s+(coins?|money|credits?)\b',
     re.IGNORECASE,
 )
+
+# Rejection / withdrawal / goodbye — the man pulling away, dismissing her, or
+# threatening to leave ("I don't want you", "waste of time", "I'm done", "bye").
+# On a dating platform this is one of the most common turns, and the worst thing
+# the reply can do is argue or beg. Detected here so a targeted "feelings
+# recovery" instruction can be injected (see below) — NOT a full deflection,
+# because his message still has real content to answer.
+_REJECTION_PATTERN = re.compile(
+    r'\b(?:i\s+)?(?:don\'?t|do\s+not|no\s+longer|dont)\s+want\s+(?:you|to|this|it|u)\b'
+    r'|\bwaste\s+of\s+(?:my\s+)?time\b'
+    r'|\b(?:i\'?m|i\s+am)\s+(?:done|out|leaving|gone|finished)\b'
+    r'|\b(?:good\s?bye|goodbye|bye\s+now|im\s+off)\b'
+    r'|\bnot\s+interested\b|\bforget\s+(?:it|you|this)\b|\bnever\s?mind\b'
+    r'|\bwrit(?:e|ten|ing)\s+(?:you|me)\s+off\b|\bgiv(?:e|ing)\s+up\s+on\s+(?:you|this)\b'
+    r'|\byou\'?re\s+(?:a\s+)?(?:waste|fake|boring|nothing|not\s+worth)\b'
+    r'|\b(?:done|over)\s+with\s+(?:you|this|it)\b'
+    r'|\blos(?:e|t|ing)\s+interest\b|\bmov(?:e|ing)\s+on\b',
+    re.IGNORECASE,
+)
+
+
+def _has_rejection(text: str) -> bool:
+    return bool(_REJECTION_PATTERN.search(text))
+
 
 def _deflect(user_id, time_slot=None):
     """
@@ -1041,6 +1070,17 @@ def generate_context_aware_response(
             "He is questioning whether you are real. Do NOT say 'I am real', do NOT confirm or deny "
             "anything about being AI. Stay entirely in the woman's voice and turn the attention back "
             "to him with something only a woman who was truly paying attention could say.\n\n"
+        )
+
+    # Rejection / withdrawal recovery — feelings-forward, never argue or beg.
+    if _has_rejection(conversation):
+        instruction += (
+            "He is pulling away, dismissing you, or saying he does not want this. Do NOT argue, "
+            "defend yourself, or beg. Let it show that it landed — a little wounded, a little "
+            "proud, honestly disappointed that someone you were starting to hope about might walk "
+            "away. Keep your dignity, never grovel, never declare love. One honest, warm line, "
+            "then a question that gently leaves the door open and makes him feel he would be "
+            "losing something real by going.\n\n"
         )
 
     user_prompt = (

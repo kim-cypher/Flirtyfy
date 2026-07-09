@@ -118,8 +118,13 @@ class Payment(models.Model):
         ('failed', 'Failed'),
         ('cancelled', 'Cancelled'),
     ]
+    PLAN_CHOICES = [
+        ('topup', 'Top-up'),
+        ('weekly', 'Weekly'),
+    ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payments')
     phone_number = models.CharField(max_length=20)
+    plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default='topup')
     amount_kes = models.DecimalField(max_digits=10, decimal_places=2)
     clicks_granted = models.PositiveIntegerField()
     checkout_request_id = models.CharField(max_length=100, unique=True, db_index=True)

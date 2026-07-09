@@ -172,3 +172,60 @@
   justify-content: center;
   margin-bottom: 6px;
 }
+
+/* ── Two-plan selector ────────────────────────────────────────────────── */
+.sub-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0 10px;
+}
+.sub-plan {
+  position: relative;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+.sub-plan:hover { border-color: rgba(192, 132, 252, 0.6); }
+.sub-plan--active {
+  border-color: #c084fc;
+  background: rgba(192, 132, 252, 0.12);
+  box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.15);
+}
+.sub-plan-badge {
+  position: absolute;
+  top: -10px;
+  right: 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1a1024;
+  background: linear-gradient(90deg, #d946a8, #9333ea);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.sub-plan-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.sub-plan-price {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+.sub-plan-desc {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.35;
+}

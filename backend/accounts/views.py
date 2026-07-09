@@ -370,7 +370,10 @@ class GenerateButtonResponseView(APIView):
             status_val = 'complete'
             last_result = None
 
-            for attempt in range(3):
+            # Retry generously server-side so the user just waits a moment for a
+            # fresh reply instead of being told to tap again. Each attempt gets
+            # the avoid-list + rotation, so collisions after a few tries are rare.
+            for attempt in range(6):
                 result = generate_button_response(request.user.id, button_intent, time_slot=time_slot)
                 if 'error' in result:
                     return Response({'success': False, 'message': result['error']}, status=HTTP_400_BAD_REQUEST)
@@ -496,8 +499,14 @@ class CreditsView(APIView):
             'available_clicks': credits.available_clicks(),
             'referral_code': credits.referral_code,
             'referral_link': f"{origin}/register?ref={credits.referral_code}",
-            'subscription_price_usd': settings.SUBSCRIPTION_PRICE_USD,
-            'subscription_clicks': settings.SUBSCRIPTION_CLICKS,
+            'plans': {
+                'topup':  {'price_kes': settings.TOPUP_PRICE_KES,  'clicks': settings.TOPUP_CLICKS},
+                'weekly': {'price_kes': settings.WEEKLY_PRICE_KES, 'clicks': settings.WEEKLY_CLICKS,
+                           'days': settings.WEEKLY_EXPIRY_DAYS},
+            },
+            # Back-compat for any UI still reading the old keys.
+            'subscription_price_kes': settings.TOPUP_PRICE_KES,
+            'subscription_clicks': settings.TOPUP_CLICKS,
         })
 
 
@@ -567,6 +576,16 @@ class InitiatePaymentView(APIView):
         if not phone_number:
             return Response({'success': False, 'message': 'Please provide a phone number.'}, status=HTTP_400_BAD_REQUEST)
 
+        # Which plan: weekly bundle or one-off top-up (default).
+        plan = str(request.data.get('plan', 'topup')).strip().lower()
+        if plan == 'weekly':
+            amount_kes = settings.WEEKLY_PRICE_KES
+            clicks_granted = settings.WEEKLY_CLICKS
+        else:
+            plan = 'topup'
+            amount_kes = settings.TOPUP_PRICE_KES
+            clicks_granted = settings.TOPUP_CLICKS
+
         if not (settings.MPESA_CONSUMER_KEY and settings.MPESA_PASSKEY and settings.MPESA_CALLBACK_URL):
             logger.error("Payment attempted but M-Pesa credentials are not configured")
             return Response(
@@ -575,7 +594,7 @@ class InitiatePaymentView(APIView):
             )
 
         try:
-            result = mpesa_service.initiate_stk_push(phone_number, settings.SUBSCRIPTION_PRICE_KES)
+            result = mpesa_service.initiate_stk_push(phone_number, amount_kes)
         except Exception as e:
             logger.error(f"M-Pesa STK push failed for user {request.user.id}: {e}")
             return Response(
@@ -594,8 +613,9 @@ class InitiatePaymentView(APIView):
         Payment.objects.create(
             user=request.user,
             phone_number=mpesa_service.normalize_phone(phone_number),
-            amount_kes=settings.SUBSCRIPTION_PRICE_KES,
-            clicks_granted=settings.SUBSCRIPTION_CLICKS,
+            plan=plan,
+            amount_kes=amount_kes,
+            clicks_granted=clicks_granted,
             checkout_request_id=checkout_request_id,
             merchant_request_id=result.get('MerchantRequestID', ''),
             status='pending',
@@ -696,7 +716,9 @@ class MpesaCallbackView(APIView):
 
             from .services.credits import grant_credits
             from .services.notifications import create_notification
-            grant_credits(payment.user, payment.clicks_granted, 'purchase')
+            # Weekly bundle lapses after 7 days; top-up does not expire.
+            expiry = settings.WEEKLY_EXPIRY_DAYS if payment.plan == 'weekly' else None
+            grant_credits(payment.user, payment.clicks_granted, 'purchase', expires_in_days=expiry)
             create_notification(
                 payment.user, 'payment_success', "Payment received!",
                 f"Your payment of {payment.amount_kes} KES went through. "
