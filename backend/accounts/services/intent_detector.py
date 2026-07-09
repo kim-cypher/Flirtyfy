@@ -31,11 +31,14 @@ from .button_generator import (
     _has_male_anatomy_language,
     _has_time_mention,
     _has_logistics_leak,
+    _has_overused_frame,
     _opener_signature,
     _CHARACTER_BREAK_PATTERN,
     generate_button_response,
     )
-from .dedup import dedupe_against_history, dedupe_similar, dedupe_question_tail
+from .dedup import (
+    dedupe_against_history, dedupe_similar, dedupe_question_tail, get_recent_user_texts,
+)
 
 _FORCED_QUESTION_WORDS = ['What', 'When', 'How', 'Who', 'Which', 'Is', 'Are', 'Do', 'Would', 'Could']
 
@@ -67,13 +70,18 @@ WOMAN_PERSONA_SYSTEM = (
     "Write her reply AT his register, never above it.\n\n"
 
 
-    "HOW SHE WRITES — RICH, never a terse throwaway:\n"
-    "- 2 to 4 sentences, roughly 30 to 55 words. Every reply has real substance: a genuine "
-    "HOOK (a specific thought she had, a small thing from her own world, or an honest reaction "
-    "to exactly what he said) that leads naturally into her question. Never a bare one-line "
-    "reaction like 'I'm so wet, what next?' — give a fully-formed, warm, textured reply.\n"
-    "- Match his register for HEAT, not for LENGTH: even when he is terse or explicit, she still "
-    "writes a full, rich reply — she just keeps it direct and sensual instead of flowery.\n"
+    "HOW SHE WRITES — RICH but tight, never padded:\n"
+    "- Usually TWO sentences: a strong, specific HOOK, then the question. Roughly 25 to 40 words. "
+    "The richness comes from the hook being vivid and specific — NOT from adding length or a "
+    "third explaining sentence.\n"
+    "- NEVER add a formal, essay-like middle sentence. Banned: 'I appreciate someone who…', "
+    "'possesses the wisdom', 'passionate convictions', 'work methodically', 'that quality in you'. "
+    "She texts like a real woman, not a greeting card. If a sentence sounds like a personality "
+    "assessment, cut it.\n"
+    "- Match his register for HEAT, not for LENGTH: even when he is terse or explicit, she gives "
+    "a full, warm reply — just direct and sensual, never flowery.\n"
+    "- Never a bare one-line reaction like 'I'm so wet, what next?' — but never a paragraph either. "
+    "Two real sentences that a man reads once and wants to answer.\n"
     "- Sentence 1 responds to the most personal detail in his last message — proof she truly "
     "read it. Never open with 'That is', 'That sounds', 'Wow', 'Oh', 'I appreciate', "
     "'I understand'.\n"
@@ -579,6 +587,8 @@ def _reply_violations(text: str) -> list:
         v.append('the final sentence must be a real question starting with a question word')
     if _has_formula_phrase(text):
         v.append('uses a banned formula phrase')
+    if _has_overused_frame(text):
+        v.append('uses an overused frame (scrolling, picked first, sound out of me, or a fidget opener) — reach for something fresh')
     if _has_contact_leak(text):
         v.append('mentions calling / hearing his voice')
     if _has_physical_reality_intrusion(text):
@@ -1018,15 +1028,51 @@ def generate_context_aware_response(
     temporal = _get_temporal_context(time_slot=time_slot)
 
     # ── Step 6: variety block ─────────────────────────────────────────────────
+    # ── Step 6b: cross-panel avoid-list + memory-leak guard ───────────────────
+    # Uniqueness is per USER, not per panel: one person's left-panel and button
+    # replies all go out under the same identity, so both must draw from the
+    # same recent pool. get_recent_user_texts spans BOTH panels (it filters by
+    # user, not intent_type). CRITICAL: these messages were sent to DIFFERENT
+    # men in unrelated chats — the reply must never borrow a name, place, or
+    # personal detail from them (that is the dangerous "memory" leak). They are
+    # shown ONLY so the new reply avoids repeating the same shapes and frames.
+    cross_recent = []
+    if user_id is not None:
+        try:
+            cross_recent = get_recent_user_texts(user_id)[:6]
+        except Exception:
+            cross_recent = []
+    # Same-conversation drafts (passed in) go first — those must be dodged hardest.
+    pool, seen = [], set()
+    for r in list(recent_replies or []) + cross_recent:
+        key = (r or '').strip().lower()
+        if r and key not in seen:
+            seen.add(key)
+            pool.append(r)
+    pool = pool[:7]
+
     avoid = ''
-    if recent_replies:
+    if pool:
+        openers = sorted({_opener_signature(r) for r in pool if r})
         avoid = (
-            "Messages she has ALREADY SENT (some possibly earlier drafts for this same "
-            "conversation) — your reply must use a completely different angle, structure, "
-            "opening, and question from every one of these:\n"
-            + "\n".join(f"- {r}" for r in recent_replies[:5])
+            "HER OWN RECENT MESSAGES — these were sent to OTHER men in unrelated chats. "
+            "NEVER copy any NAME, place, job, or personal detail from them into this reply; "
+            "those facts belong to other people, not to this man. Use them ONLY to make this "
+            "reply clearly different in angle, structure, opening, imagery, and question:\n"
+            + "\n".join(f"- {r}" for r in pool)
+            + "\nShe recently opened with these structures — open a completely different way, "
+            "do not start with the same idea:\n"
+            + "; ".join(openers)
             + "\n\n"
         )
+        # If the very same conversation was answered before, demand a new ANGLE,
+        # not just new words (the '3x confidence' pattern seen in production).
+        if recent_replies:
+            avoid += (
+                "You have answered THIS SAME conversation before (the drafts above). Choose a "
+                "different TYPE of question and a different emotional angle this time — not "
+                "merely different wording of the same idea.\n\n"
+            )
 
     # ── Step 7: build prompt ──────────────────────────────────────────────────
     base = (

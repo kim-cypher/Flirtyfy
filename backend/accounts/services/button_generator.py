@@ -436,13 +436,14 @@ BUTTON_INTENTS = {
         'name': '✨ New Match',
         'row': 1,
         'prompt': (
-            "She reached out first and he has just written back — his reply is her first real read "
-            "on who he is. She responds to something specific in HIS reply that made her want to "
-            "keep going: his energy, his humour, the thing he chose to say. Warm, not flattery. "
-            "Base it on his WORDS only — she has never seen his photos or face, so never mention "
-            "pictures, looks, or scrolling. "
-            "Her question is easy and fun to answer, about who he is — the kind of early question "
-            "that makes a man think 'she is different'. Keep it light, warm, welcoming. No heavy desire."
+            "They just matched and exchanged hellos — nothing has been said yet beyond that. "
+            "Now SHE sends the first real message to get things going. IMPORTANT: she has no idea "
+            "who he is yet, so she must NOT reference anything he said, invent a scene, a place, "
+            "a photo, or assume anything about him — there is nothing to go on. "
+            "It is simply a warm, light, curious opener that makes him want to reply: genuine "
+            "interest in getting to know him — what brought him here, how his day is going, the "
+            "kind of easy question a man answers because it feels effortless and different. "
+            "Keep it simple and welcoming. No heavy desire, no assumptions."
         ),
     },
     'dead': {
@@ -1252,8 +1253,10 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     if recent:
         recent_openers = {_opener_signature(t) for t in recent if t}
         user_prompt += (
-            "\n\nHer OWN recent messages — your reply must not resemble any of them in "
-            "opening words, sentence shape, imagery, or question:\n"
+            "\n\nHer OWN recent messages — sent to OTHER men in unrelated chats. NEVER copy a "
+            "name, place, or personal detail from them (those belong to other people). Use them "
+            "ONLY so your reply does not resemble any of them in opening words, sentence shape, "
+            "imagery, or question:\n"
             + "\n".join(f"- {t}" for t in recent)
         )
         if recent_openers:
@@ -1350,6 +1353,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 or _has_meeting_fantasy(t)
                 or _has_male_anatomy_language(t)
                 or _has_formula_phrase(t)
+                or _has_overused_frame(t)
                 or _has_temporal_leak(t)
                 or _has_time_mention(t)
                 or _has_logistics_leak(t)
@@ -1777,6 +1781,34 @@ _MEETING_FANTASY_PATTERNS = re.compile(
 
 def _has_meeting_fantasy(text: str) -> bool:
     return bool(_MEETING_FANTASY_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Overused-frame detector — the model's favourite intimate-confession crutches.
+# Live output over two hours surfaced the same frames recurring across
+# unrelated conversations for one user ("I stop scrolling", "want to be picked
+# first", "the first sound out of me", "my knee's bouncing under the desk
+# admitting…", "not just a good option"). Each reads fine alone, but a man
+# reading 25 of her messages notices she keeps reaching for the same moves.
+# Word-level dedup can't see them (the surrounding words vary), so this gates
+# the frames directly and forces the model off its defaults.
+# ---------------------------------------------------------------------------
+
+_OVERUSED_FRAME_PATTERNS = re.compile(
+    r'\bscroll(?:ing|ed)?\b'
+    r'|\b(?:picked|chosen)\s+first\b'
+    r'|\bwant(?:ed|ing)?\s+to\s+be\s+(?:picked|chosen)\b'
+    r'|\bsomeone\'?s\s+whole\s+answer\b'
+    r'|\b(?:first|that|the)\s+sound\s+(?:you\'?d?\s+|you\s+)?\w*\s*(?:pull|punch|drag|coax)\w*\s+out\s+of\s+me\b'
+    r'|\bsound\s+(?:you\'?d?\s+want\s+)?(?:to\s+)?(?:pull|punch|drag)\w*\s+out\s+of\s+me\b'
+    r'|\bnot\s+just\s+(?:a\s+good\s+option|like\s+me|someone\s+to\s+like)\b'
+    r'|\bmy\s+(?:thumb|knee|leg|pulse|tea|coffee)\b[^.?!]{0,45}\b(?:hover|bounc|gone\s+cold|twitch|jitter)',
+    re.IGNORECASE,
+)
+
+
+def _has_overused_frame(text: str) -> bool:
+    return bool(_OVERUSED_FRAME_PATTERNS.search(text))
 
 
 # ---------------------------------------------------------------------------
