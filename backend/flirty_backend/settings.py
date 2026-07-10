@@ -251,9 +251,16 @@ ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 if not ANTHROPIC_API_KEY:
     print("⚠️ WARNING: ANTHROPIC_API_KEY not set in environment variables")
 
-# Generation model: Sonnet 5 for the user-facing replies (better instruction
-# following / register matching), Haiku for cheap internal rewrites.
+# Model tiers — the main cost lever.
+#   FAST       : cheap first-pass generation. Buttons (standalone, low stakes)
+#                use it outright; the left panel uses it for the first attempt
+#                and escalates to GENERATION only when the gates reject it.
+#   GENERATION : the pricier, more nuanced model — used only on escalation.
+#   REWRITE    : cheap dedup/rewrite calls.
+# KILL SWITCH: to keep the left panel on Sonnet for every reply, set
+#   ANTHROPIC_FAST_MODEL=claude-sonnet-5 in the environment.
 # NOTE: claude-sonnet-5 rejects non-default temperature/top_p — never pass them.
+ANTHROPIC_FAST_MODEL = env("ANTHROPIC_FAST_MODEL", default="claude-haiku-4-5")
 ANTHROPIC_GENERATION_MODEL = env("ANTHROPIC_GENERATION_MODEL", default="claude-sonnet-5")
 ANTHROPIC_REWRITE_MODEL = env("ANTHROPIC_REWRITE_MODEL", default="claude-haiku-4-5")
 

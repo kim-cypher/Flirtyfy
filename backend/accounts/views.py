@@ -370,10 +370,10 @@ class GenerateButtonResponseView(APIView):
             status_val = 'complete'
             last_result = None
 
-            # Retry generously server-side so the user just waits a moment for a
-            # fresh reply instead of being told to tap again. Each attempt gets
-            # the avoid-list + rotation, so collisions after a few tries are rare.
-            for attempt in range(6):
+            # A couple of server-side attempts is plenty — the avoid-list makes
+            # collisions rare, and each attempt is a full generation, so 6 was
+            # pure waste. The frontend still auto-retries silently on top of this.
+            for attempt in range(2):
                 result = generate_button_response(request.user.id, button_intent, time_slot=time_slot)
                 if 'error' in result:
                     return Response({'success': False, 'message': result['error']}, status=HTTP_400_BAD_REQUEST)

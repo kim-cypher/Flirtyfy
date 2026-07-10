@@ -1249,9 +1249,10 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     # "my <body part> reading that…"). Showing it the actual recent messages,
     # and their opening structures explicitly, is what makes every click feel
     # new. Pure DB read (indexed) — negligible cost.
-    recent = get_recent_user_texts(user_id)[:5]
+    recent_full = get_recent_user_texts(user_id)[:5]
+    recent = recent_full[:3]  # full-text avoid-list capped at 3 (the costly part)
     if recent:
-        recent_openers = {_opener_signature(t) for t in recent if t}
+        recent_openers = {_opener_signature(t) for t in recent_full if t}  # signatures from more, cheaply
         user_prompt += (
             "\n\nHer OWN recent messages — sent to OTHER men in unrelated chats. NEVER copy a "
             "name, place, or personal detail from them (those belong to other people). Use them "
@@ -1304,9 +1305,12 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     )
 
     # ── Step 3: Generate ───────────────────────────────────────────────────
+    # Buttons are a standalone message with NO conversation to read — low stakes,
+    # no register to misjudge — so they run on the cheap FAST model outright
+    # (~1/3 the price). The gates below still guard quality.
     try:
         response = get_anthropic_client().messages.create(
-            model=settings.ANTHROPIC_GENERATION_MODEL,
+            model=settings.ANTHROPIC_FAST_MODEL,
             # Static system prompt is marked cacheable; the rotating user
             # prompt stays after the cache breakpoint.
             system=[{
@@ -1315,7 +1319,6 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 'cache_control': {'type': 'ephemeral'},
             }],
             messages=[{'role': 'user', 'content': user_prompt}],
-            # Sonnet 5 rejects non-default temperature/top_p — never pass them.
             thinking={'type': 'disabled'},
             max_tokens=btn_max_tokens,
         )
@@ -1374,7 +1377,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 "End with a question mark. Just write the message."
             )
             retry_resp = get_anthropic_client().messages.create(
-                model=settings.ANTHROPIC_GENERATION_MODEL,
+                model=settings.ANTHROPIC_FAST_MODEL,
                 system=_RETRY_SYSTEM,
                 messages=[{'role': 'user', 'content': retry_prompt}],
                 thinking={'type': 'disabled'},

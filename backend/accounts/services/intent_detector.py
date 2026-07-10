@@ -992,9 +992,11 @@ def generate_context_aware_response(
     if inferred_slot:
         time_slot = inferred_slot
 
-    # Trim to last 1500 chars — signal is in recent messages
-    if len(conversation) > 1500:
-        conversation = conversation[-1500:]
+    # Trim to last 1000 chars — the reply keys off his last message plus a
+    # little context; more than this is paid-for tokens that don't change the
+    # answer. (Was 1500; ~1/3 fewer transcript tokens on every call and retry.)
+    if len(conversation) > 1000:
+        conversation = conversation[-1000:]
 
     topic = intent_data.get('topic', 'general')
     tone  = intent_data.get('tone', 'flirty')
@@ -1042,7 +1044,7 @@ def generate_context_aware_response(
     cross_recent = []
     if user_id is not None:
         try:
-            cross_recent = get_recent_user_texts(user_id)[:6]
+            cross_recent = get_recent_user_texts(user_id)[:5]
         except Exception:
             cross_recent = []
     # Same-conversation drafts (passed in) go first — those must be dodged hardest.
@@ -1052,11 +1054,14 @@ def generate_context_aware_response(
         if r and key not in seen:
             seen.add(key)
             pool.append(r)
-    pool = pool[:7]
+    # Full-text avoid-list capped at 4 (the expensive part); opener signatures
+    # below carry the structural-repetition signal from the rest cheaply.
+    sig_pool = pool[:8]
+    pool = pool[:4]
 
     avoid = ''
     if pool:
-        openers = sorted({_opener_signature(r) for r in pool if r})
+        openers = sorted({_opener_signature(r) for r in sig_pool if r})
         avoid = (
             "HER OWN RECENT MESSAGES — these were sent to OTHER men in unrelated chats. "
             "NEVER copy any NAME, place, job, or personal detail from them into this reply; "
@@ -1144,10 +1149,10 @@ def generate_context_aware_response(
         f"--- END PROMPT ---"
     )
 
-    def _generate(extra_instruction: str = '') -> tuple:
+    def _generate(model: str, extra_instruction: str = '') -> tuple:
         """One generation call → (register, gated_reply, violations)."""
         response = get_anthropic_client().messages.create(
-            model=settings.ANTHROPIC_GENERATION_MODEL,
+            model=model,
             # cache_control: the static persona is cached across calls; the
             # volatile transcript lives in the user message after the breakpoint.
             system=[{
@@ -1168,20 +1173,25 @@ def generate_context_aware_response(
         return register, reply, _reply_violations(reply)
 
     try:
-        register, result, violations = _generate()
+        # Cost cascade: the cheap FAST model writes the first draft. The gates
+        # judge it — if it's clean, we ship Haiku (a third of the price). Only a
+        # rejected draft escalates to the pricier GENERATION model, which also
+        # gets the specific fix-instructions, so it lands. Set ANTHROPIC_FAST_MODEL
+        # = the Sonnet id to force every reply through the top model.
+        register, result, violations = _generate(settings.ANTHROPIC_FAST_MODEL)
 
         if violations == ['character_break']:
             logger.warning("Left-panel: character break detected, returning deflection")
             return _deflect(user_id, time_slot)
 
         if violations:
-            # One corrective retry, telling the model exactly what was wrong.
-            # _generate() already applied every gate (via _reply_violations),
-            # so the retry decision is purely violations-based — no need to
-            # re-run individual checks here.
+            # Escalate the retry to the nuanced model, telling it exactly what
+            # was wrong. _generate() already applied every gate, so the retry
+            # decision is purely violations-based.
             forced_q_word = random.choice(_FORCED_QUESTION_WORDS)
-            logger.info(f"Left-panel retry — violations: {violations}")
+            logger.info(f"Left-panel retry (escalating to generation model) — violations: {violations}")
             retry_register, retry_result, retry_violations = _generate(
+                settings.ANTHROPIC_GENERATION_MODEL,
                 '\n\nYour previous attempt was rejected for these reasons: '
                 + '; '.join(violations) + '. '
                 f'Fix every one of them. The final sentence MUST be a question beginning '
