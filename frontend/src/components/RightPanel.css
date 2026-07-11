@@ -1,4 +1,4 @@
-/* RightPanel — 6×6 compact grid */
+/* RightPanel — three sleek scenario cards */
 
 .right-panel {
   display: flex;
@@ -7,166 +7,9 @@
 }
 
 .right-panel-header {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
-.right-panel-title {
-  margin: 0 0 5px 0;
-  font-size: 17px;
-  font-weight: 800;
-  color: #ffffff;
-  letter-spacing: 0.3px;
-}
-
-.right-panel-subtitle {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  color: #cccccc;
-  line-height: 1.5;
-}
-
-
-/* 6-column grid */
-.buttons-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 7px;
-}
-
-/* Individual button — label only, no emoji */
-.scenario-button {
-  position: relative;
-  padding: 8px 5px;
-  background: #0a0a0a;
-  border: 1.5px solid #2a2a2a;
-  border-radius: 9px;
-  color: #cccccc;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: center;
-  min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.button-label {
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: #cccccc;
-  display: block;
-  word-break: break-word;
-  text-align: center;
-  max-width: 100%;
-  padding: 0 3px;
-  letter-spacing: 0.2px;
-}
-
-.scenario-button:hover:not(:disabled) {
-  background: #1a1a1a;
-  border-color: #ffffff;
-  color: #ffffff;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.15);
-  transform: translateY(-1px);
-}
-
-.scenario-button:hover:not(:disabled) .button-label {
-  color: #ffffff;
-}
-
-.scenario-button:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: none;
-}
-
-.scenario-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.scenario-button.loading {
-  background: #1a1a1a;
-  border-color: #ffffff;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
-  cursor: wait;
-}
-
-/* Spinner replaces label while loading */
-.scenario-button.loading .button-label {
-  display: none;
-}
-
-.button-spinner {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Section divider between main and extra button rows */
-.buttons-section-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 8px 0 2px;
-  color: #999999;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-.buttons-section-divider::before,
-.buttons-section-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: #333333;
-}
-
-/* Error */
-.right-panel .error-message {
-  padding: 9px 12px;
-  border-radius: 7px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: rgba(224, 85, 85, 0.1);
-  border: 1px solid rgba(224, 85, 85, 0.35);
-  color: #ff8a8a;
-}
-
-/* Wider screens — a touch more room */
-@media (min-width: 1400px) {
-  .scenario-button { min-height: 54px; padding: 10px 5px; }
-  .button-label    { font-size: 12px; }
-}
-
-/* Narrow panels — keep 6 columns, scale down slightly */
-@media (max-width: 900px) {
-  .scenario-button { min-height: 42px; padding: 7px 3px; }
-  .button-label    { font-size: 10px; }
-}
-
-/* Mobile — drop to 3 columns so buttons stay readable */
-@media (max-width: 600px) {
-  .buttons-grid    { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .scenario-button { min-height: 50px; padding: 9px 6px; }
-  .button-label    { font-size: 12px; }
-}
-
-/* ── Update-time control (next to Quick Scenarios title) ──────────────── */
 .right-panel-title-row {
   display: flex;
   align-items: center;
@@ -175,12 +18,28 @@
   flex-wrap: wrap;
 }
 
+.right-panel-title {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.right-panel-subtitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #9a8fa3;
+  line-height: 1.5;
+}
+
 .update-time-btn {
-  padding: 5px 12px;
+  padding: 6px 13px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(192, 132, 252, 0.28);
+  background: rgba(192, 132, 252, 0.06);
+  color: rgba(226, 214, 236, 0.9);
   font-size: 0.78rem;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -191,4 +50,125 @@
   border-color: #c084fc;
   color: #c084fc;
   transform: translateY(-1px);
+}
+
+/* Card stack — three confident choices */
+.cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scenario-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 74px;
+  padding: 16px 18px;
+  text-align: left;
+  background: linear-gradient(150deg, #1a121e 0%, #100b14 100%);
+  border: 1.5px solid #2f2733;
+  border-radius: 18px;
+  color: #ece4f0;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+/* subtle sheen that sweeps on hover */
+.scenario-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 120% at 0% 0%, rgba(192, 132, 252, 0.10), transparent 45%);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+
+.scenario-card:hover:not(:disabled) {
+  border-color: #c084fc;
+  box-shadow: 0 10px 30px rgba(192, 132, 252, 0.22);
+  transform: translateY(-2px);
+}
+
+.scenario-card:hover:not(:disabled)::after { opacity: 1; }
+.scenario-card:active:not(:disabled) { transform: translateY(0); }
+
+.scenario-card:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.card-emoji {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+.card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-label {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+}
+
+.card-desc {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #a99bb2;
+}
+
+.card-arrow {
+  font-size: 18px;
+  color: #5c5063;
+  flex-shrink: 0;
+  transition: transform 0.16s ease, color 0.16s ease;
+}
+
+.scenario-card:hover:not(:disabled) .card-arrow {
+  color: #c084fc;
+  transform: translateX(3px);
+}
+
+.scenario-card.loading {
+  border-color: #c084fc;
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.25);
+  cursor: wait;
+  justify-content: center;
+}
+
+.card-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(192, 132, 252, 0.25);
+  border-top-color: #c084fc;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Error */
+.right-panel .error-message {
+  margin-top: 12px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(224, 85, 85, 0.1);
+  border: 1px solid rgba(224, 85, 85, 0.35);
+  color: #ff8a8a;
 }

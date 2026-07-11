@@ -187,6 +187,44 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* "His last messages" stepper */
+.his-last-n {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 0 12px;
+}
+
+.his-last-n-label {
+  font-size: 0.82rem;
+  color: #b3a7bd;
+  font-weight: 500;
+}
+
+.his-last-n-steps { display: inline-flex; gap: 6px; }
+
+.his-last-n-step {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1.5px solid #322b38;
+  background: #0e0a12;
+  color: #b3a7bd;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.13s ease;
+}
+.his-last-n-step:hover:not(:disabled) { border-color: #c084fc; color: #c084fc; }
+.his-last-n-step.active {
+  background: #c084fc;
+  border-color: #c084fc;
+  color: #ffffff;
+  box-shadow: 0 3px 12px rgba(192, 132, 252, 0.3);
+}
+.his-last-n-step:disabled { cursor: not-allowed; opacity: 0.5; }
+
 /* Mobile */
 @media (max-width: 768px) {
   .conversation-textarea { min-height: 160px; }

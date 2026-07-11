@@ -1,6 +1,7 @@
 /**
- * RightPanel — 36 scenario buttons in a 6×6 grid.
- * Ordered: Opening → Emotional → Daily → Fantasy → Personal → Sexual
+ * RightPanel — the three "nothing to paste" scenario buttons:
+ * New Match, Vulnerable, and Reply to Trigger. Each is a topic-tree generator,
+ * so it never repeats. Everything conversation-driven lives in the left panel.
  */
 
 import React, { useState } from 'react';
@@ -10,9 +11,7 @@ import './RightPanel.css';
 
 function RightPanel({ onButtonClick, loading, loadingButton, onOpenTimeModal }) {
   const [error, setError] = useState('');
-  const allButtons = getAvailableButtons();
-  const mainButtons  = allButtons.filter(b => b.row < 7);
-  const extraButtons = allButtons.filter(b => b.row === 7);
+  const buttons = getAvailableButtons();
 
   const handleButtonClick = async (buttonId) => {
     setError('');
@@ -38,53 +37,34 @@ function RightPanel({ onButtonClick, loading, loadingButton, onOpenTimeModal }) 
               🕐 Update time
             </button>
           </div>
-          <p className="right-panel-subtitle">Stuck? Insisting to meet? Click the buttons. Happy Flirting!</p>
+          <p className="right-panel-subtitle">No conversation to paste? Pick a scenario.</p>
         </div>
 
-        <div className="buttons-grid">
-          {mainButtons.map((button) => (
+        <div className="cards-stack">
+          {buttons.map((button) => (
             <button
               key={button.id}
-              className={`scenario-button${loadingButton === button.id ? ' loading' : ''}`}
+              className={`scenario-card${loadingButton === button.id ? ' loading' : ''}`}
               onClick={() => handleButtonClick(button.id)}
               disabled={loading}
               type="button"
-              title={button.description}
               aria-label={`${button.shortLabel} — ${button.description}`}
             >
-              <span className="button-label">{button.shortLabel}</span>
-              {loadingButton === button.id && (
-                <span className="button-spinner" aria-hidden="true" />
+              {loadingButton === button.id ? (
+                <span className="card-spinner" aria-hidden="true" />
+              ) : (
+                <>
+                  <span className="card-emoji" aria-hidden="true">{button.emoji}</span>
+                  <span className="card-text">
+                    <span className="card-label">{button.shortLabel}</span>
+                    <span className="card-desc">{button.description}</span>
+                  </span>
+                  <span className="card-arrow" aria-hidden="true">→</span>
+                </>
               )}
             </button>
           ))}
         </div>
-
-        {extraButtons.length > 0 && (
-          <>
-            <div className="buttons-section-divider">
-              <span>Get to Know Him</span>
-            </div>
-            <div className="buttons-grid">
-              {extraButtons.map((button) => (
-                <button
-                  key={button.id}
-                  className={`scenario-button${loadingButton === button.id ? ' loading' : ''}`}
-                  onClick={() => handleButtonClick(button.id)}
-                  disabled={loading}
-                  type="button"
-                  title={button.description}
-                  aria-label={`${button.shortLabel} — ${button.description}`}
-                >
-                  <span className="button-label">{button.shortLabel}</span>
-                  {loadingButton === button.id && (
-                    <span className="button-spinner" aria-hidden="true" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
 
         {error && (
           <div className="error-message" role="alert">

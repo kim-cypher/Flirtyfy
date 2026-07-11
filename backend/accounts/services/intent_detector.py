@@ -71,13 +71,19 @@ WOMAN_PERSONA_SYSTEM = (
 
 
     "HOW SHE WRITES — RICH, never a terse throwaway:\n"
-    "- 2 to 3 sentences, roughly 30 to 55 words. Every reply has real substance: a genuine "
-    "HOOK (a specific thought she had, a small thing from her own world, or an honest reaction "
-    "to exactly what he said) that leads naturally into her question. Never a bare one-line "
-    "reaction like 'I'm so wet, what next?' — give a fully-formed, warm, textured reply.\n"
-    "- The richness is a VIVID, specific detail or feeling — NEVER a formal, essay-like middle "
-    "sentence that explains, rates, or analyses him. Rich means textured and real, not a "
-    "paragraph of analysis.\n"
+    "- 2 to 3 SHORT sentences, roughly 20 to 40 words — texted fast, never a paragraph. Every "
+    "reply has a genuine HOOK (a specific thought, a small thing from her own world, or an honest "
+    "reaction to exactly what he said) that leads into her question. She REACTS to the MOOD of his "
+    "message like a real person — laugh or tease when he is funny or filthy ('damn', 'no way'), "
+    "comfort him when he is down, keep the spark alive when he is happy, liven things up when he "
+    "is flat — then her question. Never a bare one-liner like 'I'm so wet, what next?', but never "
+    "a paragraph either.\n"
+    "- NEVER analyse or diagnose him: never tell him what his words 'tell you', 'say about you', "
+    "or what they 'mean', never name his feelings or psychology for him ('something in you feels "
+    "ignored', 'you crave', 'who do you become', 'who do you turn into'). React like a woman, not "
+    "a therapist. And never refer to your OWN earlier messages, your question, or the act of "
+    "asking ('my question', 'I read it twice', 'I turned it into a quiz') — she is texting, not "
+    "reviewing herself.\n"
     "- Match his register for HEAT, not for LENGTH: even when he is terse or explicit, she still "
     "writes a full, rich reply — she just keeps it direct and sensual instead of flowery.\n"
     "- BAN the greeting-card / personality-assessment voice — she texts like a real woman, not a "
@@ -479,7 +485,7 @@ _HIM_PREFIXES = frozenset(['him', 'he', 'man', 'guy', 'user'])
 _HER_PREFIXES = frozenset(['me', 'her', 'she', 'woman', 'girl', 'you'])
 
 
-def _build_labeled_transcript(conversation: str) -> str:
+def _build_labeled_transcript(conversation: str, his_last_n: int = 1) -> str:
     """
     Convert a pasted conversation into a speaker-labeled transcript the LLM
     can actually reason about:
@@ -530,11 +536,19 @@ def _build_labeled_transcript(conversation: str) -> str:
     if not blocks:
         return ''
 
-    # Assign roles alternating backward from the end: last block = HIM.
+    # Assign roles. The last `his_last_n` blocks are ALL his (consecutive man
+    # messages — the case that used to get mislabeled as the woman's); blocks
+    # before that run alternate backward starting from YOU. his_last_n defaults
+    # to 1, reproducing the old "last block = HIM" behavior, and meaning a single
+    # pasted message is always treated as the man's.
     n = len(blocks)
+    his_run_start = max(0, n - max(1, his_last_n))
     labeled = []
     for i, block in enumerate(blocks):
-        default_role = 'HIM' if (n - 1 - i) % 2 == 0 else 'YOU'
+        if i >= his_run_start:
+            default_role = 'HIM'
+        else:
+            default_role = 'YOU' if (his_run_start - 1 - i) % 2 == 0 else 'HIM'
         role = explicit_roles.get(i, default_role)
         labeled.append(f"{role}: {' '.join(block)}")
     return '\n'.join(labeled)
@@ -964,6 +978,7 @@ def generate_context_aware_response(
     recent_replies: Optional[list] = None,
     time_slot: str = None,
     user_id: int = None,
+    his_last_n: int = 1,
 ) -> Dict:
     """
     Generate one reply from the woman's perspective.
@@ -1024,7 +1039,7 @@ def generate_context_aware_response(
     # This is what lets the model understand multi-turn man/woman/man uploads:
     # every message is labeled HIM/YOU, so it knows who said what, which facts
     # the persona already claimed, and which thread to continue.
-    transcript = _build_labeled_transcript(conversation)
+    transcript = _build_labeled_transcript(conversation, his_last_n=his_last_n)
 
     # ── Step 5: temporal context — mood only, never the literal day/time ──────
     # Passing "It is Friday, late night" made the model NAME the day/time in
@@ -1096,11 +1111,12 @@ def generate_context_aware_response(
 
     if escalation_found and not working:
         instruction = (
-            "His message asked to meet, move platforms, share numbers, or give a location. "
-            "Act as if that part was never written. "
-            "Do NOT address it, decline it, or reference it in any way. "
-            "Instead: share something about herself at his register, "
-            "then ask a question that pulls him deeper into THIS conversation.\n\n"
+            "His message was ONLY a push to meet, move platforms, or share a number/location — "
+            "nothing else to answer. Act as if that part was never written; do NOT address or "
+            "decline it. Instead, look at the LAST thing SHE said (the most recent YOU: line above) "
+            "and ADVANCE that thread — take the topic you two were already on somewhere new with a "
+            "fresh thought or a little imagination, keeping the SAME mood and register you were both "
+            "in. Then one question that pulls him deeper here.\n\n"
         )
     elif escalation_found and multi_q_found:
         instruction = (
@@ -1111,7 +1127,9 @@ def generate_context_aware_response(
         instruction = (
             f"Part of his message asked to meet, move platforms, or share contact info — that part does not exist. "
             f"Do NOT reference it, decline it, or acknowledge it in any way. "
-            f"Respond only to: \"{working}\"\n\n"
+            f"Respond only to: \"{working}\". Grab the most concrete thing in it — a place, an object, "
+            f"an activity he named (a cabin, a bike, his garden) — and build a warm, curious, or playful "
+            f"reply or a little imagination around THAT, then your question.\n\n"
         )
     elif multi_q_found:
         instruction = f"He asked several questions — respond only to: \"{best_q}\"\n\n"

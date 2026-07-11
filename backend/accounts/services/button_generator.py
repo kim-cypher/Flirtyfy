@@ -269,59 +269,286 @@ def _select_life_slice(button_intent: str, session_data: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# New-match "notice angles" — new_match is the most-clicked button. Its
-# prompt asks her to confess "something about how he replied that opened
-# something in her" with no fixed subject, which is the exact same blank-
-# canvas gap _LIFE_SLICES fixes for row 7 — just scoped to "what she noticed
-# in his reply" instead of "what's happening in her own life". Same
-# Python-rotates-the-category, LLM-invents-the-words mechanism.
+# New-match TOPIC TREE — new_match is the cold open: they just matched and she
+# sends the first real message, so there is NOTHING he said to react to yet. The
+# old "notice angles" assumed there was, which is exactly why it "got confused
+# about what to ask". Instead we hand her ONE concrete opener topic each time,
+# from a two-level tree (10 everyday domains, each with several subtopics), so
+# she always has a real, easy thing to ask. Python rotates the domain (no
+# consecutive repeat) and picks a subtopic; the 9 tones multiply it further —
+# 10 × ~5 × 9 ≈ 450 non-repeating opener flavors. Everything here is
+# first-message-safe: no meeting, no off-app, no heavy therapy, nothing assumed
+# about him. (Distilled from the 10-category research — kept the useful seeds,
+# dropped every meeting/contact/escalation ladder that would break this site.)
 # ---------------------------------------------------------------------------
 
-_NEW_MATCH_ANGLES = [
-    {
-        'name': 'his wording',
-        'instruction': "Ground it in one specific word or phrase he chose — what that exact choice told her.",
-    },
-    {
-        'name': 'his timing',
-        'instruction': "Ground it in how he replied — fast, slow, thoughtful — and what that pace did to her.",
-    },
-    {
-        'name': 'his curiosity',
-        'instruction': "Ground it in a question he asked or specific interest he showed in her.",
-    },
-    {
-        'name': 'his confidence',
-        'instruction': "Ground it in how he carried himself in the message — sure of himself without trying.",
-    },
-    {
-        'name': 'his humor',
-        'instruction': "Ground it in something that actually made her smile or laugh, specifically.",
-    },
-    {
-        'name': 'his attentiveness',
-        'instruction': "Ground it in one specific detail he picked up on from what she said first.",
-    },
-    {
-        'name': 'his directness',
-        'instruction': "Ground it in how plainly or simply he said something, no games.",
-    },
-]
-_NEW_MATCH_ANGLE_NAMES = frozenset(a['name'] for a in _NEW_MATCH_ANGLES)
+_NEW_MATCH_TOPICS = {
+    'daily life': [
+        "how he actually starts his mornings",
+        "what he reaches for to unwind after a long day",
+        "whether his week runs busy or slow right now",
+        "the small ordinary thing that quietly makes his day",
+        "how he spends a slow weekend with nothing planned",
+        "whether he lives by routine or takes each day as it comes",
+    ],
+    'what he loves': [
+        "the hobby he loses all track of time in",
+        "the thing he could talk about for hours",
+        "something he is quietly really good at",
+        "a passion that surprises people when they find out",
+        "what he was obsessed with as a kid that still stuck",
+        "the last thing that genuinely excited him",
+    ],
+    'music and screen': [
+        "the song he always turns up loud",
+        "a film or show he can rewatch forever",
+        "the last thing that truly gripped him",
+        "a book or story that stayed with him",
+        "what he puts on to instantly feel good",
+        "the artist he would see live in a heartbeat",
+    ],
+    'food': [
+        "his ultimate comfort meal",
+        "the one dish he actually loves to cook",
+        "the meal he could happily eat every single day",
+        "a food that instantly takes him back somewhere",
+        "whether he lands on sweet or savoury",
+        "the most memorable thing anyone ever cooked for him",
+    ],
+    'dreams and places': [
+        "the one place he would fly to tomorrow with zero plan",
+        "a skill or language he has always meant to learn",
+        "the version of life he is quietly working toward",
+        "a small dream most people do not know he has",
+        "the town or city he could picture himself in someday",
+        "the trip that has been sitting on his list forever",
+    ],
+    'his character': [
+        "the trait he values most in the people he keeps close",
+        "what actually makes him trust someone",
+        "what people tend to get wrong about him at first",
+        "how he is different once you really know him",
+        "the kind of man he is always trying to be",
+    ],
+    'playful': [
+        "what genuinely makes him laugh out loud",
+        "the kind of funny he is — dry, silly, or mischievous",
+        "a ridiculous would-you-rather to see how he thinks",
+        "the last thing that completely cracked him up",
+        "the harmless trouble he would get up to with a free day",
+    ],
+    'younger years': [
+        "a childhood memory that still makes him grin",
+        "the best kind of trouble he got into growing up",
+        "a tradition from his younger years he still misses",
+        "whether he was wild or shy as a boy",
+        "the place he grew up and what it felt like",
+    ],
+    'daydreams': [
+        "where he would teleport for one perfect day",
+        "his idea of a flawless lazy day from start to finish",
+        "a dream setting he would disappear into — a cabin, the coast, a city",
+        "what he would do with a whole day and no obligations",
+        "the kind of evening that sounds like heaven to him",
+    ],
+    'senses and comfort': [
+        "a smell that instantly takes him somewhere else",
+        "the sound he could listen to forever",
+        "his favourite kind of night — a storm, deep quiet, or warmth",
+        "what 'cozy' actually looks like for him",
+        "the setting that makes him feel most at ease",
+    ],
+}
+_NEW_MATCH_DOMAINS = tuple(_NEW_MATCH_TOPICS.keys())
 
 
-def _select_new_match_angle(session_data: dict) -> dict:
-    """Rotation across the 7 notice-angles, no consecutive repeats."""
-    key = 'new_match_angle'
-    remaining = [n for n in session_data.get(key, []) if n in _NEW_MATCH_ANGLE_NAMES]
+# ---------------------------------------------------------------------------
+# Vulnerability TOPIC TREE — same mechanism as new_match, scoped to the
+# territories of a real, specific confession she keeps armored. Emotional, never
+# sexual (row 2 register), never a diagnosis of HIM — always HER own unguarded
+# truth, then a question that invites him to the same place.
+# ---------------------------------------------------------------------------
 
+_VULNERABILITY_TOPICS = {
+    'wanting too much': [
+        "how it scares her to want someone this much this fast",
+        "the fear of being the one who cares more",
+        "how badly she wants to be wanted, and how exposed that feels",
+        "the part of her that reaches first and then panics about it",
+        "how she hates needing anyone, yet here she is",
+    ],
+    'being truly seen': [
+        "the fear that if he really knew her he might look away",
+        "how being fully seen feels more naked than any body ever could",
+        "the version of her she keeps hidden from almost everyone",
+        "how hard it is to drop the guard even when she wants to",
+        "the terror and the relief of being understood",
+    ],
+    'old wounds': [
+        "the wall she built after someone taught her to expect leaving",
+        "how the last hurt still edits the way she trusts",
+        "the habit of protecting herself before anyone can",
+        "why she tests people without meaning to",
+        "something a past person broke that she is still rebuilding",
+    ],
+    'loneliness': [
+        "the specific ache of an empty evening",
+        "how she can be surrounded and still feel unreached",
+        "the nights she wishes someone knew her mind without asking",
+        "craving closeness she rarely admits out loud",
+        "the quiet that gets loud when the day goes still",
+    ],
+    'not enough': [
+        "the voice that says she is too much and not enough at once",
+        "how she compares herself and always loses",
+        "the fear she is easy to put down and forget",
+        "the days she does not believe she is worth choosing",
+        "the impostor feeling she hides behind her confidence",
+    ],
+    'the hidden want': [
+        "a desire she keeps armored because admitting it changes how people see her",
+        "the thing she wants but has never said plainly",
+        "how she performs 'easygoing' while wanting something much bigger",
+        "the softness she hides under how independent she seems",
+        "what she craves that she is scared to name",
+    ],
+    'fear of leaving': [
+        "how she braces for people to disappear",
+        "the way she half-expects him to vanish like others did",
+        "why she pulls back a little first so it hurts less",
+        "the fear of being written off without warning",
+        "how she reads silence as the start of goodbye",
+    ],
+    'the overthinker': [
+        "the spiral she falls into the second after she hits send",
+        "how she rereads her own words and cringes",
+        "the reassurance she needs but hates asking for",
+        "how a slow reply can rewrite a whole story in her head",
+        "the noise in her mind she wishes someone could quiet",
+    ],
+    'fragile dreams': [
+        "a hope she protects because saying it out loud makes it breakable",
+        "the future she is scared to want in case it never comes",
+        "the dream she downplays so no one can laugh at it",
+        "what she quietly wishes for when no one is listening",
+        "the life she is almost too superstitious to describe",
+    ],
+    'the armor': [
+        "how tired she is of being the strong one who never needs anything",
+        "the front of having it together while barely holding on",
+        "how she wants to be taken care of, just once",
+        "the softness she saves only for someone who earns it",
+        "what it quietly costs her to always be the reliable one",
+    ],
+}
+_VULNERABILITY_DOMAINS = tuple(_VULNERABILITY_TOPICS.keys())
+
+
+# ---------------------------------------------------------------------------
+# Reply-to-Trigger TOPIC TREE — she already texted and he has not replied, so
+# she sends ONE more, playing it with light FEELINGS: a little wounded, a little
+# playful, mock-disappointed — never a real declaration of love, never desperate,
+# never "why are you ignoring me". Each domain is a different flavor of nudge so
+# it never repeats.
+# ---------------------------------------------------------------------------
+
+_TRIGGER_TOPICS = {
+    'playful hurt': [
+        "pretending to be wounded that he went quiet, all in good humor",
+        "acting mock-heartbroken that he left her on read",
+        "a theatrical 'so this is how it ends' with a wink",
+        "playing up the sting of the silence without meaning it",
+        "a dramatic sigh about being so easily forgotten",
+    ],
+    'mock disappointment': [
+        "and here she thought he was the one she came here for",
+        "the letdown of building him up in her head for nothing",
+        "how she expected more from the one who seemed different",
+        "pretending her whole evening was riding on his reply",
+        "the exaggerated tragedy of her high hopes",
+    ],
+    'teasing accusation': [
+        "asking, playfully, if he has written her off already",
+        "accusing him of ghosting the best thing on here",
+        "wondering out loud what she did to earn the cold shoulder",
+        "calling him out for making her wait, with a smile",
+        "asking if he always keeps a woman guessing like this",
+    ],
+    'light worry': [
+        "wondering, softly, if she said something wrong",
+        "checking he is okay underneath the teasing",
+        "hoping she did not scare him off by being too forward",
+        "a gentle 'did I misread this' with no neediness",
+        "asking if the quiet means she moved too fast",
+    ],
+    'confident challenge': [
+        "admitting she does not chase, but she is making one exception",
+        "putting the ball firmly back in his court",
+        "daring him to give her a reason to keep her attention",
+        "letting him know the window to impress her is open, briefly",
+        "a cool 'your move' with a spark under it",
+    ],
+    'warm miss': [
+        "how he crossed her mind and she could not help reaching out",
+        "admitting the chat felt quieter without his replies",
+        "missing the energy he brought, just a little",
+        "how something reminded her of him and here she is",
+        "confessing he is oddly hard to stop thinking about",
+    ],
+    'cheeky ultimatum': [
+        "offering him one chance to redeem himself, generously",
+        "a playful last-call before she moves her attention along",
+        "teasing that he is running out of time to be interesting",
+        "half-threatening to give up on him, clearly not meaning it",
+        "a mischievous 'impress me or lose me' with a grin",
+    ],
+    'self-aware': [
+        "owning that she is double-texting like a schoolgirl",
+        "laughing at herself for caring whether he replies",
+        "admitting she swore she would play it cool and failed",
+        "poking fun at her own lack of patience",
+        "confessing she is not usually the one who reaches first",
+    ],
+    'dangling intrigue': [
+        "hinting she had something to tell him, maybe she keeps it now",
+        "teasing a thought she will only share if he shows up",
+        "dropping that he is missing something good by staying quiet",
+        "leaving a little mystery to reel him back",
+        "promising the reward is worth breaking his silence for",
+    ],
+    'mood drop': [
+        "how her afternoon got boring the second his replies stopped",
+        "admitting he was the highlight and now the day dimmed",
+        "how the spark went flat without him firing back",
+        "confessing she keeps checking her phone like a fool",
+        "how the fun left the room when he did",
+    ],
+}
+_TRIGGER_DOMAINS = tuple(_TRIGGER_TOPICS.keys())
+
+
+def _rotate_topic(tree: dict, domains: tuple, session_data: dict, key: str) -> tuple:
+    """Rotate a topic tree's domain (no consecutive repeat), pick a fresh subtopic.
+    Shared by new_match / vulnerability / reply_trigger. → (domain, subtopic)."""
+    remaining = [d for d in session_data.get(key, []) if d in tree]
     if not remaining:
-        remaining = list(_NEW_MATCH_ANGLE_NAMES)
+        remaining = list(domains)
         random.shuffle(remaining)
-
-    chosen_name = remaining.pop(0)
+    domain = remaining.pop(0)
     session_data[key] = remaining
-    return next(a for a in _NEW_MATCH_ANGLES if a['name'] == chosen_name)
+    return domain, random.choice(tree[domain])
+
+
+def _select_new_match_topic(session_data: dict) -> tuple:
+    return _rotate_topic(_NEW_MATCH_TOPICS, _NEW_MATCH_DOMAINS, session_data, 'new_match_domain')
+
+
+def _select_vulnerability_topic(session_data: dict) -> tuple:
+    return _rotate_topic(_VULNERABILITY_TOPICS, _VULNERABILITY_DOMAINS, session_data, 'vulnerability_domain')
+
+
+def _select_trigger_topic(session_data: dict) -> tuple:
+    return _rotate_topic(_TRIGGER_TOPICS, _TRIGGER_DOMAINS, session_data, 'trigger_domain')
 
 
 # ---------------------------------------------------------------------------
@@ -446,346 +673,26 @@ BUTTON_INTENTS = {
             "Keep it simple and welcoming. No heavy desire, no assumptions."
         ),
     },
-    'dead': {
-        'name': '💀 Dead Convo',
-        'row': 1,
-        'prompt': (
-            "The conversation faded and she is bringing it back to life — lightly, with zero guilt "
-            "and zero pressure. She offers one small, fresh, curious thing from her side (a thought, "
-            "a tiny moment from her day) as an easy doorway back in. "
-            "Her question is so effortless and interesting that answering is easier than ignoring it. "
-            "Playful and warm, never needy, never 'why did you stop replying'."
-        ),
-    },
-    'you_went_silent': {
-        'name': '⏰ Went Silent',
-        'row': 1,
-        'prompt': (
-            "He went quiet for a while and now the door is being reopened — with warmth, not blame. "
-            "She shares one small thing that made her think of him while he was gone, so coming back "
-            "feels welcome and easy, like no apology is needed. "
-            "Her question is light and about HIM — his days, his world — giving him a soft landing "
-            "back into the conversation. Never mention the silence itself as a problem."
-        ),
-    },
-    'shower_fantasy': {
-        'name': '🚿 Shower',
-        'row': 1,
-        'prompt': (
-            "She is alone, stripped down, warm water, nothing managing her mind. "
-            "She confesses what her mind does in there when the filter is off — where it goes, what it runs through, "
-            "what the heat and the privacy and her own skin do to her wanting. "
-            "Her question turns it back on him: that same unguarded space, what it is like for him."
-        ),
-    },
-    'morning_flirt': {
-        'name': '🌅 Morning',
-        'row': 1,
-        'prompt': (
-            "First waking minutes — the day has not asked anything of her yet, the mind still loose. "
-            "She confesses what was already there before obligations arrived: the thought that found her before she went looking for it. "
-            "Her question is about his morning — what gets him first, what the day starts with when it opens exactly right."
-        ),
-    },
-    'after_work': {
-        'name': '🛋️ After Work',
-        'row': 1,
-        'prompt': (
-            "The day finally released her — that specific exhale when the performing version of herself goes offline. "
-            "She confesses the real want the workday kept politely at a distance, the thing she reaches for "
-            "the moment the obligations stop. "
-            "Her question makes him feel like part of how she lands at the end of the day."
-        ),
-    },
-
-    # ── ROW 2 — Emotional Connection ────────────────────────────────────────
-    'provider_energy': {
-        'name': '🛡️ Quiet Strength',
-        'row': 2,
-        'prompt': (
-            "He carries the energy of a man who handles things without performing it — quiet strength, no theater. "
-            "She confesses the specific physical response that quality wakes in her: not admiration for the trait "
-            "but what it does to her body, her wanting, her willingness to let go. "
-            "Her question goes somewhere she wants him to go — into his own experience of what that strength means."
-        ),
-    },
-    'strategic_withdrawal': {
-        'name': '🍃 Need Space',
-        'row': 2,
-        'prompt': (
-            "She is briefly less available and says so warmly, without apology or drama. "
-            "VARY the reason every time — a demanding stretch of work, family pulling at her, "
-            "her own head needing quiet, a day that ran away from her, an errand-swallowed "
-            "afternoon — never the same frame twice, never heavy. "
-            "Her question is an honest invitation: something she wants to know about him "
-            "that he can answer while she is away, so the thread stays alive."
-        ),
-    },
-    'deep_emotion': {
-        'name': '💔 Deep Feel',
-        'row': 2,
-        'prompt': (
-            "Something arrived too fast — a feeling she did not send for that now lives in a specific place in her chest. "
-            "She confesses how specifically he takes up space inside her: the weight of it, the size, "
-            "the fact that it came in uninvited and refuses to behave. "
-            "Her question asks him to go somewhere equally unguarded inside himself."
-        ),
-    },
-    'lyrical_romance': {
-        'name': '💌 Sweet Words',
-        'row': 2,
-        'prompt': (
-            "She describes, in one concrete sensory image, what talking to HIM does to her — "
-            "the feeling in her own body or day that his presence creates, said like a line "
-            "she cannot get out of her head. The image is entirely HERS (never an invented "
-            "detail or quote of his — she may at most reference his photos or overall vibe). "
-            "Her question invites him to tell her something about himself worth noticing — "
-            "so the exact seeing can come from him, not be fabricated about him."
-        ),
-    },
     'vulnerability': {
         'name': '💭 Vulnerable',
         'row': 2,
         'prompt': (
-            "There is one specific want she keeps armored because admitting it changes how people see her — "
+            "There is one specific thing she keeps armored because admitting it changes how people see her — "
             "not a generic insecurity, a real one with its own shape and history. "
             "She lets it surface now, plainly, without softening it into something smaller or safer. "
             "Her question asks him to go to that same unguarded place — the thing he protects, not performs — "
             "and trust her with it the way she just trusted him."
         ),
     },
-    'family_talk': {
-        'name': '🏠 Family',
+    'reply_trigger': {
+        'name': '💔 Reply to Trigger',
         'row': 2,
         'prompt': (
-            "She wants to understand where he came from — not as a question but as a feeling "
-            "that his past is the key to something in him she wants to reach. "
-            "She shares something brief and honest about what she believes family reveals about a person — "
-            "sets warm, genuine curiosity without weight. "
-            "Her question makes him feel like she wants to trace what shaped him, with care."
-        ),
-    },
-
-    # ── ROW 3 — Daily Life & Lifestyle ──────────────────────────────────────
-    'lunch_break': {
-        'name': '🥗 Lunch',
-        'row': 3,
-        'prompt': (
-            "Midday pause — everything demanding her is briefly suspended. "
-            "She confesses what her mind goes to the moment the obligations stop: "
-            "what shows up in the gap when she is not managing anything. "
-            "Her question makes him feel like the thought that wins against everything the day is asking her to do."
-        ),
-    },
-    'dont_go': {
-        'name': '🙏 Don\'t Go',
-        'row': 3,
-        'prompt': (
-            "He is about to leave or pulling away. She does not argue, beg, or perform love. "
-            "She lets it show that it landed — a little wounded, a little proud, honestly "
-            "disappointed that someone she was starting to hope about might slip away. Warm and "
-            "dignified, never desperate, never a declaration of love. "
-            "Her question gently reopens the door and makes him feel he would be losing something "
-            "real by walking off now. VARY the wound every time — never the same phrasing twice."
-        ),
-    },
-    'wine_stars': {
-        'name': '🍷 Wine & Stars',
-        'row': 3,
-        'prompt': (
-            "Something warm in her hands, open sky overhead, nowhere to be — "
-            "the combination that makes her feel very small and very present at once. "
-            "She confesses what that kind of night does to her wanting: what it opens, what it makes her honest about. "
-            "Her question makes him feel like the missing piece of a scene she is already inside."
-        ),
-    },
-    'work_talk': {
-        'name': '💼 Work Talk',
-        'row': 3,
-        'prompt': (
-            "Work is where people perform the version of themselves they can explain — "
-            "she wants the unedited one underneath. "
-            "She shares something brief and honest about what she thinks work reveals about who a person really is. "
-            "Her question is not about his job title but about his real relationship to what he does — "
-            "the part that would never make the interview version."
-        ),
-    },
-
-    # ── ROW 4 — Fantasy & Romance ────────────────────────────────────────────
-    'slow_dance': {
-        'name': '💃 Foreplay',
-        'row': 4,
-        'prompt': (
-            "What most people rush past is the thing she lives inside. "
-            "She confesses what slowness does to her in general — the mental and physical shift "
-            "when someone takes their time. Spoken as her own truth or imagination, never as a "
-            "memory of him; they have never met or touched. "
-            "Her question finds out whether he understands that the slow part is the whole point."
-        ),
-    },
-    'outdoor_fantasy': {
-        'name': '🌿 Outdoors',
-        'row': 4,
-        'prompt': (
-            "Open air, no walls — the specific charge that comes from the possibility of exposure. "
-            "She confesses what she imagines being outside with someone WOULD do to her wanting. "
-            "Purely hypothetical; never a shared memory or plan — they have never met. "
-            "Her question finds out what his appetite for this territory is."
-        ),
-    },
-    'public_display': {
-        'name': '💋 Public PDA',
-        'row': 4,
-        'prompt': (
-            "A purely IMAGINED future scene — they have never met, so nothing here has happened. "
-            "She confesses what she imagines being openly claimed in public WOULD do to her someday: "
-            "not possession but choice, and the response that choice would create in her. "
-            "All hypothetical, framed as wondering. "
-            "Her question asks what that kind of gesture would cost or mean on his end."
-        ),
-    },
-    'restaurant_fantasy': {
-        'name': '🕯️ Restaurant',
-        'row': 4,
-        'prompt': (
-            "A purely IMAGINED charged dinner — nothing has happened; they have never met. "
-            "She confesses what the anticipation of a dinner like that WOULD do to her: "
-            "the moment when the ordinary would become something else entirely. "
-            "Framed as imagination, never as memory or plan. "
-            "Her question asks what he would think about inside that specific electricity."
-        ),
-    },
-    'public_fantasy': {
-        'name': '🌃 Public',
-        'row': 4,
-        'prompt': (
-            "A purely IMAGINED scene of being visibly together someday — they have never met. "
-            "She confesses what she imagines being openly, publicly chosen WOULD do to her "
-            "nervous system. All hypothetical, framed as wondering, never as memory or plan. "
-            "Her question asks whether any version of that lands the same way on his side."
-        ),
-    },
-    'kitchen_flirt': {
-        'name': '👩‍🍳 Kitchen',
-        'row': 4,
-        'prompt': (
-            "She is in her own kitchen right now, or daydreaming there — a warm, close space. "
-            "She confesses what she imagines the right person in a kitchen WOULD do to her someday — "
-            "how closeness and warmth would make whatever she was doing matter less. "
-            "Purely imagined; they have never met and share no memories. "
-            "Her question finds out what would happen in him when a kitchen stops being a kitchen."
-        ),
-    },
-
-    # ── ROW 5 — Personal & Deep ──────────────────────────────────────────────
-    'his_exes': {
-        'name': '👻 His Exes',
-        'row': 5,
-        'prompt': (
-            "She wants to understand who he has been — not jealous, genuinely curious, "
-            "because past love is the most honest autobiography. "
-            "She shares something brief and true about what she believes past relationships reveal about a person. "
-            "Her question makes him feel like she wants to trace what shaped him through his history — "
-            "not audit it, understand it."
-        ),
-    },
-    'secrets': {
-        'name': '🤫 Secrets',
-        'row': 5,
-        'prompt': (
-            "Earlier she told him she has secrets, and he asked her to share one — she follows through now. "
-            "She gives him one specific NAUGHTY secret: sexual or deliciously private, the kind she does not say "
-            "to most people, told plainly and without apology. Not vague vulnerability — a real, specific "
-            "confession with an edge to it. "
-            "Her question finds out what he does with the weight of being trusted with something this honest."
-        ),
-    },
-    'long_without': {
-        'name': '⏳ No Touch',
-        'row': 5,
-        'prompt': (
-            "The territory of wanting that has waited — desire that built up over time. "
-            "NEVER diagnose him ('you seem lonely', 'you have gone so long') — she speaks "
-            "from HER side: what slow-built, patient wanting feels like, what waiting does "
-            "to how much something matters when it finally arrives. "
-            "Her question invites him to say what waiting has been like for him — his answer, "
-            "his framing, not her assumption."
-        ),
-    },
-    'bdsm_talk': {
-        'name': '⛓️ BDSM',
-        'row': 5,
-        'prompt': (
-            "The moment when control shifts — when she stops deciding and everything she was holding "
-            "gets handed over to someone she trusts completely. "
-            "She confesses her real relationship to this dynamic: which side draws her, "
-            "what the trust and the intensity require, the specific thing that calls her into this territory. "
-            "Her question is a genuine invitation to find out where he sits in all of it."
-        ),
-    },
-    'kinky_at_work': {
-        'name': '🖥️ Kinky Work',
-        'row': 5,
-        'prompt': (
-            "Desire arriving in the middle of a completely ordinary professional moment — "
-            "the impossible charge of wanting someone when nothing in the situation should allow it. "
-            "She confesses the precise contrast: what her body is doing beneath the professional exterior, "
-            "what a closed door or an unremarkable moment does to her concentration. "
-            "Her question finds out what he does when something like this happens to him."
-        ),
-    },
-
-    # ── ROW 6 — Sexual Escalation ────────────────────────────────────────────
-    'bedroom_questions': {
-        'name': '🛏️ Bedroom',
-        'row': 6,
-        'prompt': (
-            "An explicit physical thought she has been carrying — the specific image or scenario "
-            "she keeps returning to and cannot leave alone. "
-            "She says it without softening. "
-            "Her question goes somewhere inside him that requires a real, specific answer — "
-            "the one only he could give from exactly where he is."
-        ),
-    },
-    'positions': {
-        'name': '😈 Positions',
-        'row': 6,
-        'prompt': (
-            "Sex positions are not mechanics — they are about power, visibility, trust, "
-            "and what a person needs to feel most themselves inside the act. "
-            "She confesses her honest experience of a specific position: what it gives her, "
-            "what the control or angle or exposure does to the particular way she comes undone. "
-            "Her question finds out what positions reveal about him."
-        ),
-    },
-    'bedtime_fantasies': {
-        'name': '🌜 Bedtime',
-        'row': 6,
-        'prompt': (
-            "Last hour before sleep — the mind finally off-duty, going exactly where it has been trying to go all day. "
-            "She confesses the specific thought or sensation she returns to in the dark when nothing is managing her: "
-            "the detail she has been circling all day and lets herself fully enter only now. "
-            "Her question makes him feel like what finds her in her most unguarded hour."
-        ),
-    },
-    'toy_play': {
-        'name': '🎲 Toys',
-        'row': 6,
-        'prompt': (
-            "Her toys are not a substitute — they are a vocabulary, and she wants to teach him that language. "
-            "She confesses her honest relationship to what she uses: what it does for her, "
-            "the specific thing she keeps imagining him doing instead of or alongside her. "
-            "Her question makes him feel like she already included him in what she does alone."
-        ),
-    },
-    'fetishes': {
-        'name': '🎭 Fetishes',
-        'row': 6,
-        'prompt': (
-            "The specific edge of her desire — the thing she does not explain to most people because most people cannot hold it. "
-            "She confesses what makes her desire interesting: what she has done, what she is still curious about, "
-            "the precise thing at the edge of what she has let herself want. "
-            "Her question is the door she opens to find out if he can stand inside it without flinching."
+            "She already texted him and he has NOT replied yet — so she sends ONE more message to "
+            "reopen the door, playing it with light FEELINGS. A little wounded, a little playful, a "
+            "touch of mock-disappointment — but NEVER a real declaration of love, never desperate, "
+            "never 'why are you ignoring me'. Warm, self-aware, and disarming, with an easy question "
+            "that makes replying feel irresistible."
         ),
     },
 }
@@ -936,79 +843,14 @@ _QUESTION_CATEGORIES = [
 # ---------------------------------------------------------------------------
 
 _BUTTON_Q_CATS: dict = {
-    # ROW 1 — Opening & Re-entry
+    # Only the two surviving buttons. new_match asks light opener questions;
+    # vulnerability is the confession button + the internal deflection engine.
     'new_match':         ['his_character', 'his_habit', 'his_instinct', 'confession_landing',
                           'his_preference', 'the_dynamic'],
-    'dead':              ['his_instinct', 'confession_landing', 'his_habit',
-                          'the_dynamic', 'his_character', 'his_preference'],
-    'you_went_silent':   ['confession_landing', 'his_instinct', 'his_habit',
-                          'the_dynamic', 'his_character', 'his_body_now'],
-    'shower_fantasy':    ['his_preference', 'his_habit', 'what_hed_ask_her',
-                          'his_body_now', 'his_instinct', 'confession_landing'],
-    'morning_flirt':     ['his_habit', 'his_memory', 'his_past_experience',
-                          'his_preference', 'his_body_now', 'confession_landing', 'his_character'],
-    'after_work':        ['his_habit', 'his_preference', 'his_instinct',
-                          'confession_landing', 'what_hed_ask_her', 'his_body_now'],
-
-    # ROW 2 — Emotional Connection
-    'provider_energy':   ['his_habit', 'his_instinct', 'his_preference',
-                          'what_hed_ask_her', 'confession_landing', 'his_body_now'],
-    'strategic_withdrawal': ['his_habit', 'his_memory', 'his_opinion',
-                             'his_character', 'his_preference', 'confession_landing'],
-    'deep_emotion':      ['confession_landing', 'his_instinct', 'his_body_now',
-                          'his_character', 'the_dynamic', 'his_habit'],
-    'lyrical_romance':   ['confession_landing', 'his_body_now', 'his_character',
-                          'his_instinct', 'the_dynamic', 'his_habit'],
     'vulnerability':     ['confession_landing', 'his_character', 'his_instinct',
                           'his_habit', 'his_body_now', 'the_dynamic'],
-    'family_talk':       ['his_memory', 'his_past_experience', 'his_habit',
-                          'his_character', 'his_opinion'],
-
-    # ROW 3 — Daily Life & Lifestyle
-    'lunch_break':       ['his_habit', 'his_instinct', 'what_hed_ask_her',
-                          'confession_landing', 'his_preference', 'his_body_now'],
-    'dont_go':           ['confession_landing', 'his_instinct', 'his_body_now',
-                          'the_dynamic', 'his_character', 'his_habit'],
-    'wine_stars':        ['his_memory', 'his_past_experience', 'his_preference',
-                          'confession_landing', 'his_instinct', 'what_hed_ask_her'],
-    'work_talk':         ['his_habit', 'his_opinion', 'his_character',
-                          'his_memory', 'his_preference', 'confession_landing'],
-
-    # ROW 4 — Fantasy & Romance
-    'slow_dance':        ['his_habit', 'his_instinct', 'what_hed_ask_her',
-                          'his_preference', 'his_body_now', 'confession_landing'],
-    'outdoor_fantasy':   ['his_instinct', 'his_preference', 'what_hed_ask_her',
-                          'his_body_now', 'his_habit', 'confession_landing'],
-    'public_display':    ['his_instinct', 'his_habit', 'his_preference',
-                          'what_hed_ask_her', 'confession_landing', 'his_body_now'],
-    'restaurant_fantasy': ['his_memory', 'his_past_experience', 'his_instinct',
-                           'confession_landing', 'what_hed_ask_her', 'his_body_now'],
-    'kitchen_flirt':     ['his_instinct', 'his_habit', 'what_hed_ask_her',
-                          'his_body_now', 'his_preference', 'confession_landing'],
-
-    # ROW 5 — Personal & Deep
-    'his_exes':          ['his_memory', 'his_past_experience', 'his_character',
-                          'his_opinion', 'his_habit'],
-    'secrets':           ['confession_landing', 'his_character', 'his_instinct',
-                          'his_habit', 'the_dynamic', 'his_body_now'],
-    'long_without':      ['his_instinct', 'his_body_now', 'what_hed_ask_her',
-                          'his_preference', 'his_habit', 'confession_landing'],
-    'bdsm_talk':         ['his_instinct', 'his_preference', 'his_habit',
-                          'what_hed_ask_her', 'his_body_now', 'the_dynamic'],
-    'kinky_at_work':     ['his_body_now', 'his_instinct', 'confession_landing',
-                          'his_habit', 'his_preference'],
-
-    # ROW 6 — Sexual Escalation
-    'bedroom_questions': ['what_hed_ask_her', 'his_instinct', 'his_body_now',
-                          'his_preference', 'his_habit', 'confession_landing'],
-    'positions':         ['his_preference', 'his_habit', 'his_instinct',
-                          'his_body_now', 'what_hed_ask_her', 'confession_landing'],
-    'bedtime_fantasies': ['his_instinct', 'his_habit', 'his_body_now',
-                          'what_hed_ask_her', 'confession_landing'],
-    'toy_play':          ['what_hed_ask_her', 'his_instinct', 'his_body_now',
-                          'his_habit', 'his_preference', 'confession_landing'],
-    'fetishes':          ['his_preference', 'his_instinct', 'his_habit',
-                          'what_hed_ask_her', 'his_body_now', 'confession_landing'],
+    'reply_trigger':     ['confession_landing', 'his_instinct', 'his_habit',
+                          'the_dynamic', 'his_character', 'what_hed_ask_her'],
 }
 
 
@@ -1162,6 +1004,18 @@ def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> s
 
 _CHARACTER_BREAK_LAST_RESORT = "I'm not thinking about any of that right now. What's been on your mind today?"
 
+# Fallback openers for the rescue path — rotated so a rescued reply never ships
+# the same first sentence twice in a row (the old fixed string repeated verbatim).
+_RESCUE_OPENERS = [
+    "Something has been on my mind",
+    "There is a thought I keep circling back to",
+    "I have been sitting with something all evening",
+    "My mind keeps drifting back to you",
+    "Something about you has me curious",
+    "I keep catching myself thinking about this",
+    "You left me with something to chew on",
+]
+
 
 def _character_break_fallback(user_id: int, button_intent: str, time_slot: str = None) -> str:
     """
@@ -1229,12 +1083,28 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
         )
 
     if button_intent == 'new_match':
-        angle = _select_new_match_angle(session_data)
+        domain, subtopic = _select_new_match_topic(session_data)
         user_prompt += (
-            f'\n\nWhat she noticed must be grounded in this specific angle: '
-            f'{angle["name"].upper()} — {angle["instruction"]} '
-            f'Invent your own specific detail in this angle — never reuse a phrase from a previous message. '
-            f'Never use the word "profile" or "bio" — respond to what he actually said, not an abstract profile.'
+            f'\n\nGround her opener in ONE concrete territory so she always has a real, easy thing '
+            f'to ask — {domain.upper()}: specifically, {subtopic}. Build a warm, light, curious '
+            f'first message around exactly that, in her own fresh words, ending in one effortless '
+            f'question. She knows nothing about him yet, so assume nothing and reference nothing he '
+            f'said. Never use the word "profile" or "bio", and never reuse a phrase from a previous message.'
+        )
+    elif button_intent == 'vulnerability':
+        domain, subtopic = _select_vulnerability_topic(session_data)
+        user_prompt += (
+            f'\n\nGround her confession in ONE specific territory so it never repeats — '
+            f'{domain.upper()}: {subtopic}. She admits it plainly, without softening it, then asks '
+            f'him to that same unguarded place. Invent your own fresh words, never reuse a phrase.'
+        )
+    elif button_intent == 'reply_trigger':
+        domain, subtopic = _select_trigger_topic(session_data)
+        user_prompt += (
+            f'\n\nGround her nudge in ONE specific feeling-angle so it never repeats — '
+            f'{domain.upper()}: {subtopic}. Play it with light feeling only — never a declaration of '
+            f'love, never desperate — and end in one easy, disarming question. Invent your own fresh '
+            f'words, never reuse a phrase.'
         )
 
     if used_themes:
@@ -1419,7 +1289,11 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 # that triggered the retry in the first place would still ship,
                 # just with a fresh question bolted onto it.
                 if _is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1) or _has_temporal_leak(s1):
-                    s1 = "Something has been on my mind"
+                    # Rotate the fallback opener — a FIXED string here shipped
+                    # "Something has been on my mind" verbatim across many replies
+                    # (a repetition / ban risk), because deflections route through
+                    # this rescue path often.
+                    s1 = random.choice(_RESCUE_OPENERS)
 
                 rescue_q = _rescue_question(
                     category, question_word,

@@ -204,6 +204,10 @@ class GenerateSpecificResponseView(APIView):
         try:
             conversation = request.data.get('conversation', '').strip()
             time_slot = request.data.get('time_slot', None) or None
+            try:
+                his_last_n = max(1, min(5, int(request.data.get('his_last_n', 1))))
+            except (TypeError, ValueError):
+                his_last_n = 1
 
             if not conversation:
                 return Response({'success': False, 'message': 'Please provide a conversation.'}, status=HTTP_400_BAD_REQUEST)
@@ -256,7 +260,8 @@ class GenerateSpecificResponseView(APIView):
 
             # Generate response (one LLM call)
             response_result = generate_context_aware_response(
-                conversation, intent_data, _recent_replies, time_slot=time_slot, user_id=request.user.id
+                conversation, intent_data, _recent_replies, time_slot=time_slot,
+                user_id=request.user.id, his_last_n=his_last_n,
             )
             if 'error' in response_result:
                 return Response({'success': False, 'message': response_result['error']}, status=HTTP_400_BAD_REQUEST)

@@ -20,14 +20,14 @@ function ChatInterface({ user, token, timeSlot, onOpenTimeModal }) {
   const [rightLoadingButton, setRightLoadingButton] = useState(null);
   const [rightError, setRightError] = useState('');
 
-  const handleLeftGenerate = async (conversation) => {
+  const handleLeftGenerate = async (conversation, hisLastN = 1) => {
     setLeftLoading(true);
     setLeftError('');
     setLeftResponse('');
     setLeftReplyId(null);
 
     try {
-      const result = await generateSpecificResponse(conversation, timeSlot);
+      const result = await generateSpecificResponse(conversation, timeSlot, hisLastN);
       setLeftResponse(result.response);
       setLeftReplyId(result.replyId);
     } catch (error) {

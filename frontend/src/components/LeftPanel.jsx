@@ -8,6 +8,7 @@ const MIN_CHARS = 20;
 function LeftPanel({ onGenerate, loading }) {
   const [conversation, setConversation] = useState('');
   const [error, setError] = useState('');
+  const [hisLastN, setHisLastN] = useState(1);
 
   const charCount = conversation.length;
   const progressPercent = Math.min((charCount / MAX_CHARS) * 100, 100);
@@ -23,7 +24,7 @@ function LeftPanel({ onGenerate, loading }) {
     if (charCount > MAX_CHARS) { setError('Too long — max 10,000 characters.'); return; }
     setError('');
     try {
-      await onGenerate(conversation);
+      await onGenerate(conversation, hisLastN);
     } catch (err) {
       setError(err.message || 'Failed to generate reply.');
     }
@@ -32,6 +33,7 @@ function LeftPanel({ onGenerate, loading }) {
   const handleClear = () => {
     setConversation('');
     setError('');
+    setHisLastN(1);
   };
 
   return (
@@ -65,6 +67,23 @@ function LeftPanel({ onGenerate, loading }) {
       {charCount > 0 && charCount < MIN_CHARS && (
         <div className="inline-hint">Need {MIN_CHARS - charCount} more characters</div>
       )}
+
+      <div className="his-last-n" title="How many of the last messages are HIS? Bump this up when he sent several in a row.">
+        <span className="his-last-n-label">His last messages</span>
+        <div className="his-last-n-steps">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={`his-last-n-step${hisLastN === n ? ' active' : ''}`}
+              onClick={() => setHisLastN(n)}
+              disabled={loading}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="action-row">
         <button
