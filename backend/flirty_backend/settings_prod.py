@@ -204,7 +204,10 @@ if 'django.middleware.csrf.CsrfViewMiddleware' in MIDDLEWARE:
     # Keep it, but ensure it's not checking on API endpoints
     pass
 
-# Use cached template loader
+# Use cached template loader. Django forbids APP_DIRS=True together with a
+# custom 'loaders' list, so APP_DIRS must be turned off here — the cached loader
+# below still includes app_directories.Loader, so app templates keep loading.
+TEMPLATES[0]['APP_DIRS'] = False
 TEMPLATES[0]['OPTIONS']['loaders'] = [
     ('django.template.loaders.cached.Loader', [
         'django.template.loaders.filesystem.Loader',
