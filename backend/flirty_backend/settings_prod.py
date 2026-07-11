@@ -103,6 +103,15 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
     'user': '1000/hour',
     'upload': '60/hour',  # 1 upload per minute for each user
     'retrieval': '600/hour',  # More generous for retrieval
+    # Scoped throttles used by custom throttle classes (accounts/throttles.py).
+    # This dict REPLACES the base one, so these must be repeated here or the
+    # scoped views 500 with "No default throttle rate set for '<scope>'".
+    'login': '10/min',
+    'register': '5/min',
+    'password_reset': '5/min',
+    'payment_initiate': '5/min',
+    'generation_burst': '20/min',
+    'generation_daily': '300/day',
 }
 
 # ==================== LOGGING ====================
