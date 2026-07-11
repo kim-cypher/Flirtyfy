@@ -2,7 +2,6 @@
 
 # Flirty App Setup Script
 # This script automates the setup of both backend and frontend
-
 echo "================================"
 echo "Flirty App - Setup Script"
 echo "================================"

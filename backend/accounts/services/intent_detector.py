@@ -348,6 +348,105 @@ _STREET_ADDRESS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+
+# ---------------------------------------------------------------------------
+# Input sanitization — dating apps inject masked contact into the transcript:
+# phone numbers as "Mark ******", random handle/tracking codes like
+# "Wk04FB35MVhGnexvxL76", @handles, emails, and links. The model must never see
+# any of it — only the plain words the two people actually typed. Stripped up
+# front so nothing downstream (transcript, reply, gates) can hallucinate about
+# "stars" or repeat a code. Roleplay asterisks like *smiles* (single, not runs)
+# are preserved; only masked RUNS of 2+ asterisks are removed.
+# ---------------------------------------------------------------------------
+
+_SANITIZE_PATTERNS = [
+    re.compile(r'https?://\S+', re.IGNORECASE),                 # links
+    re.compile(r'\bwww\.\S+', re.IGNORECASE),                   # bare www links
+    re.compile(r'\S*\*{2,}\S*'),                                # masked runs: Mark ******, 555-***-****
+    re.compile(r'\b[\w.\-]+@[\w.\-]+\.\w{2,}\b'),               # emails
+    re.compile(r'(?<!\w)@\w[\w.\-]*'),                          # @handles
+    # long random alphanumeric codes: 12+ chars containing BOTH a letter and a
+    # digit (real words have no digits, real numbers no letters, so both are safe)
+    re.compile(r'\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{12,}\b'),
+]
+
+
+def _sanitize_conversation(text: str) -> str:
+    """Strip masked contact / app-injected junk so only plain words remain."""
+    for pat in _SANITIZE_PATTERNS:
+        text = pat.sub(' ', text)
+    # Collapse the gaps we opened, but keep newlines — the transcript needs them.
+    return re.sub(r'[ \t]{2,}', ' ', text)
+
+
+# ---------------------------------------------------------------------------
+# Foreign-language deflection — the persona only chats in English. A message in
+# another language gets a warm "English only" nudge instead of a reply, no LLM
+# call. Detection is deliberately conservative: a non-Latin script
+# (Cyrillic/CJK/Arabic/etc.) is unambiguous; for Latin-script languages we
+# require several common foreign function words AND almost no English, so an
+# English message with a foreign name or an accent is never wrongly flagged.
+# ---------------------------------------------------------------------------
+
+_NON_LATIN_RE = re.compile(
+    r'[Ѐ-ӿ'   # Cyrillic
+    r'؀-ۿ'    # Arabic
+    r'֐-׿'    # Hebrew
+    r'Ͱ-Ͽ'    # Greek
+    r'぀-ヿ'    # Hiragana/Katakana
+    r'一-鿿'    # CJK
+    r'가-힯'    # Hangul
+    r'ऀ-ॿ]'   # Devanagari
+)
+
+_FOREIGN_WORDS = frozenset((
+    "que por para con una uno como pero muy mas esta estoy tienes quiero eres hola gracias amor "
+    "je tu vous nous est suis une un avec pour pas plus tres bonjour merci amour veux "
+    "ich bin und ist nicht das mit auch sehr danke liebe hallo "
+    "voce nao para com uma sim muito obrigado amor ola estou quero "
+    "ciao sono che non per una molto grazie amore voglio sei"
+).split())
+
+_ENGLISH_STOPWORDS = frozenset((
+    "the a an is are am you i we he she it they to of and or but so my your me his her this that "
+    "what how when where who why do does did have has can will would want like love yes no not "
+    "with for in on at be been being if then than"
+).split())
+
+
+def _is_probably_foreign(text: str) -> bool:
+    """Conservative: True only on clear non-Latin script or a strong Latin-foreign signal."""
+    letters = [c for c in text if c.isalpha()]
+    if not letters:
+        return False
+    non_latin = len(_NON_LATIN_RE.findall(text))
+    if non_latin >= 4 or non_latin / len(letters) > 0.20:
+        return True
+    words = re.findall(r"[a-z']+", text.lower())
+    if len(words) < 4:
+        return False
+    eng = sum(1 for w in words if w in _ENGLISH_STOPWORDS)
+    foreign = sum(1 for w in words if w in _FOREIGN_WORDS)
+    return foreign >= 3 and eng <= 1
+
+
+# Warm "English only" nudges — rotated, so a rare foreign-language deflection
+# never ships the same line twice. Each still ends with a question.
+_ENGLISH_ONLY_RESPONSES = [
+    "You are sweet, but English is the only language I text in, love. Tell me that again in English?",
+    "I want to keep up with you, but I only chat in English here. What were you trying to say?",
+    "Mmm, you will have to give me that one in English, handsome. What is on your mind?",
+    "English is my only language on here, and I do not want to miss a word from you. Say it again for me?",
+    "I only speak English, love, and I would hate to misread you. What did you mean by that?",
+    "Help me out and keep it in English, would you? I do not want to lose a single thing you say. What is it?",
+    "You lost me there, sweetheart, English is all I speak here. What are you telling me?",
+    "I can only do English on here, and I really want to understand you. Can you put that another way for me?",
+]
+
+
+def _english_only_deflection() -> Dict:
+    return {'response': random.choice(_ENGLISH_ONLY_RESPONSES)}
+
 # Common speaker prefixes in pasted conversations
 _SPEAKER_PREFIX = re.compile(
     r'^(him|her|me|you|he|she|they|man|woman|user|guy|girl)\s*:\s*',
@@ -988,6 +1087,14 @@ def generate_context_aware_response(
     if not conversation or len(conversation.strip()) < 20:
         return {'error': 'Conversation must be at least 20 characters.'}
 
+    # Strip masked contact / app-injected junk (asterisks, @handles, emails,
+    # random codes, links) up front so the model only ever sees plain words.
+    conversation = _sanitize_conversation(conversation)
+
+    # ── Pre-check: his last message is in another language → English-only nudge ──
+    if _is_probably_foreign(_find_last_message_block(conversation)):
+        return _english_only_deflection()
+
     # ── Pre-check: coins / fake-site complaints → seductive deflection, no LLM call ──
     if _COINS_FAKE_PATTERN.search(conversation):
         return _deflect(user_id, time_slot)
@@ -1183,6 +1290,17 @@ def generate_context_aware_response(
             thinking={'type': 'disabled'},
             max_tokens=350,
         )
+        # Cost/cache visibility — grep logs for "LEFT PANEL usage" to see whether
+        # the cached prefix is actually being read (cache_read > 0 = working).
+        _u = getattr(response, 'usage', None)
+        if _u is not None:
+            logger.info(
+                "LEFT PANEL usage — model:%s in:%s out:%s cache_read:%s cache_write:%s",
+                model,
+                getattr(_u, 'input_tokens', 0), getattr(_u, 'output_tokens', 0),
+                getattr(_u, 'cache_read_input_tokens', 0),
+                getattr(_u, 'cache_creation_input_tokens', 0),
+            )
         raw = next((b.text for b in response.content if getattr(b, 'type', '') == 'text'), '')
         register, reply = _parse_reply_json(raw)
         reply = validate_character_voice(reply)
