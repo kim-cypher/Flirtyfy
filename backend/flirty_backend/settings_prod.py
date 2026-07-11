@@ -34,8 +34,8 @@ DATABASES = {
         'NAME': 'flirty',
         'USER': 'flirty',
         'PASSWORD': os.environ.get('DB_PASSWORD', 'flirty_secure_pass_2024'),
-        'HOST': 'pgbouncer',  # Connect through PgBouncer
-        'PORT': '6432',
+        'HOST': os.environ.get('DB_HOST', 'db'),      # default: straight to Postgres
+        'PORT': os.environ.get('DB_PORT', '5432'),    # set DB_HOST=pgbouncer / DB_PORT=6432 to pool again
         'CONN_MAX_AGE': 600,  # Connection pooling
         'OPTIONS': {
             'connect_timeout': 10,
