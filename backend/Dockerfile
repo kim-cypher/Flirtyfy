@@ -4,6 +4,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt gunicorn
 COPY . .
+# settings_prod LOGGING writes rotating files here — the directory must exist
+# or Django fails to configure logging at startup (worker won't boot).
+RUN mkdir -p /var/log/django
 # Threaded workers: generation requests spend ~3-5s WAITING on the Anthropic
 # API (I/O-bound), so threads are near-free concurrency. 3 workers x 8 threads
 # = ~24 concurrent requests on the same CPU/RAM (vs. 1 with the bare default).
