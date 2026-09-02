@@ -38,6 +38,7 @@ from .button_generator import (
     )
 from .dedup import (
     dedupe_against_history, dedupe_similar, dedupe_question_tail, get_recent_user_texts,
+    log_ai_usage,
 )
 
 _FORCED_QUESTION_WORDS = ['What', 'When', 'How', 'Who', 'Which', 'Is', 'Are', 'Do', 'Would', 'Could']
@@ -1290,17 +1291,9 @@ def generate_context_aware_response(
             thinking={'type': 'disabled'},
             max_tokens=350,
         )
-        # Cost/cache visibility — grep logs for "LEFT PANEL usage" to see whether
-        # the cached prefix is actually being read (cache_read > 0 = working).
-        _u = getattr(response, 'usage', None)
-        if _u is not None:
-            logger.info(
-                "LEFT PANEL usage — model:%s in:%s out:%s cache_read:%s cache_write:%s",
-                model,
-                getattr(_u, 'input_tokens', 0), getattr(_u, 'output_tokens', 0),
-                getattr(_u, 'cache_read_input_tokens', 0),
-                getattr(_u, 'cache_creation_input_tokens', 0),
-            )
+        # Cost/cache visibility — grep "AI usage" for every Anthropic call in the
+        # app, or "label:LEFT_PANEL" for this path. cache_read > 0 = cache working.
+        log_ai_usage(logger, 'LEFT_PANEL', model, response)
         raw = next((b.text for b in response.content if getattr(b, 'type', '') == 'text'), '')
         register, reply = _parse_reply_json(raw)
         reply = validate_character_voice(reply)

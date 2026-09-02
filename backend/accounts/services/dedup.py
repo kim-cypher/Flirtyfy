@@ -18,6 +18,31 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+
+def log_ai_usage(call_logger, label: str, model: str, response) -> None:
+    """Uniform per-call token accounting so EVERY Anthropic call is costable.
+
+    Grep "AI usage" in the logs for every call across the app, or
+    "label:<NAME>" (e.g. label:BUTTON_MAIN) for one specific path. The fields
+    are the exact billing inputs: uncached input tokens, output tokens, cache
+    reads, and cache writes. Never raises — cost logging must never be able to
+    break a user-facing response.
+    """
+    try:
+        u = getattr(response, 'usage', None)
+        if u is None:
+            return
+        call_logger.info(
+            "AI usage — label:%s model:%s in:%s out:%s cache_read:%s cache_write:%s",
+            label, model,
+            getattr(u, 'input_tokens', 0), getattr(u, 'output_tokens', 0),
+            getattr(u, 'cache_read_input_tokens', 0),
+            getattr(u, 'cache_creation_input_tokens', 0),
+        )
+    except Exception:
+        pass
+
+
 _DEDUP_DAYS = 30
 _DEDUP_LIMIT = 500  # generous cap over realistic 30-day per-user volume
 
@@ -70,14 +95,16 @@ def rewrite_colliding_sentence(client, sentence: str, matched_ngram: str, is_que
             f"Sentence: \"{sentence.strip()}\"\n\n"
             "Output only the rewritten sentence, nothing else."
         )
+    model = _rewrite_model()
     try:
         resp = client.messages.create(
-            model=_rewrite_model(),
+            model=model,
             system="You are a precise rewriting assistant. Output only the requested rewritten text, nothing else.",
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.9,
             max_tokens=40,
         )
+        log_ai_usage(logger, 'DEDUP_SENTENCE', model, resp)
         text = resp.content[0].text.strip().strip('"')
         if not text:
             return None
@@ -197,14 +224,16 @@ def rewrite_similar_collision(client, text: str, reference_text: str):
         "Keep the same number of sentences and similar length, ending in a genuine question. "
         "Output only the rewritten message, nothing else."
     )
+    model = _rewrite_model()
     try:
         resp = client.messages.create(
-            model=_rewrite_model(),
+            model=model,
             system="You are a precise rewriting assistant. Output only the requested rewritten message, nothing else.",
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.95,
             max_tokens=130,
         )
+        log_ai_usage(logger, 'DEDUP_SIMILAR', model, resp)
         out = resp.content[0].text.strip().strip('"')
         if not out:
             return None

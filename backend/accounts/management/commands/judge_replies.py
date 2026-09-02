@@ -92,6 +92,7 @@ class Command(BaseCommand):
 
         client = get_anthropic_client()
         judged, failed = 0, 0
+        total_in, total_out = 0, 0
 
         for r in rows:
             if r.intent_type == 'specific' and r.conversation_context:
@@ -114,6 +115,10 @@ class Command(BaseCommand):
                     max_tokens=120,
                 )
                 raw = next((b.text for b in resp.content if getattr(b, 'type', '') == 'text'), '').strip()
+                _u = getattr(resp, 'usage', None)
+                if _u is not None:
+                    total_in += getattr(_u, 'input_tokens', 0)
+                    total_out += getattr(_u, 'output_tokens', 0)
                 score, notes = self._parse(raw)
                 if score is None:
                     failed += 1
@@ -126,6 +131,10 @@ class Command(BaseCommand):
                 self.stderr.write(f"judge failed for reply {r.id}: {e}")
                 failed += 1
 
+        self.stdout.write(
+            f"AI usage — label:JUDGE model:{model} in:{total_in} out:{total_out} "
+            f"cache_read:0 cache_write:0"
+        )
         self._summary(options, judged, failed)
 
     @staticmethod

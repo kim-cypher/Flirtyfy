@@ -22,6 +22,7 @@ from .dedup import (
     dedupe_similar,
     dedupe_question_tail,
     get_recent_user_texts,
+    log_ai_usage,
 )
 
 logger = logging.getLogger(__name__)
@@ -995,6 +996,7 @@ def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> s
             temperature=1.0,
             max_tokens=40,
         )
+        log_ai_usage(logger, 'BUTTON_RESCUE_Q', settings.ANTHROPIC_REWRITE_MODEL, resp)
         q = resp.content[0].text.strip().rstrip('.,!;: ')
         return q if q.endswith('?') else q + '?'
     except Exception as e:
@@ -1192,6 +1194,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             thinking={'type': 'disabled'},
             max_tokens=btn_max_tokens,
         )
+        log_ai_usage(logger, 'BUTTON_MAIN', settings.ANTHROPIC_FAST_MODEL, response)
 
         result = next(
             (b.text for b in response.content if getattr(b, 'type', '') == 'text'), ''
@@ -1253,6 +1256,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 thinking={'type': 'disabled'},
                 max_tokens=btn_max_tokens,
             )
+            log_ai_usage(logger, 'BUTTON_RETRY', settings.ANTHROPIC_FAST_MODEL, retry_resp)
             retry_result = next(
                 (b.text for b in retry_resp.content if getattr(b, 'type', '') == 'text'), ''
             ).strip()
