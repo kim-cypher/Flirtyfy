@@ -35,3 +35,16 @@ def compute_cost(model, input_tokens, output_tokens, cache_read_tokens, cache_wr
         + _rate(model, 'cache_read') * Decimal(int(cache_read_tokens or 0))
         + _rate(model, 'cache_write') * Decimal(int(cache_write_tokens or 0))
     )
+
+
+# Revenue is collected in KES (M-Pesa); AI cost is in USD. To compare them for
+# the margin report we convert KES -> USD. Update this to your real M-Pesa
+# settlement rate whenever it drifts materially.
+KES_PER_USD = Decimal('129')
+
+
+def kes_to_usd(kes) -> Decimal:
+    """Convert a KES amount to USD using KES_PER_USD. Returns Decimal."""
+    if not kes:
+        return Decimal('0')
+    return Decimal(kes) / KES_PER_USD

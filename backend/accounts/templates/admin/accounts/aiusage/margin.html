@@ -1,0 +1,64 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a>
+  &rsaquo; <a href="{% url 'admin:accounts_aiusage_changelist' %}">AI Usage</a>
+  &rsaquo; Margin report
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div class="module" style="padding:12px 16px;margin-bottom:20px;">
+  <h2 style="margin-top:0;">System totals (lifetime)</h2>
+  <table style="border-collapse:collapse;">
+    <tr>
+      <th style="text-align:right;padding:4px 16px;">Revenue (USD)</th>
+      <th style="text-align:right;padding:4px 16px;">AI cost (USD)</th>
+      <th style="text-align:right;padding:4px 16px;">Margin (USD)</th>
+      <th style="text-align:right;padding:4px 16px;">Users losing money</th>
+    </tr>
+    <tr>
+      <td style="text-align:right;padding:4px 16px;">${{ total_revenue_usd|floatformat:2 }}</td>
+      <td style="text-align:right;padding:4px 16px;">${{ total_cost_usd|floatformat:2 }}</td>
+      <td style="text-align:right;padding:4px 16px;font-weight:bold;{% if total_margin_usd < 0 %}color:#b00;{% else %}color:#127a12;{% endif %}">
+        ${{ total_margin_usd|floatformat:2 }}
+      </td>
+      <td style="text-align:right;padding:4px 16px;{% if loser_count %}color:#b00;{% endif %}">{{ loser_count }}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="module" style="padding:12px 16px;">
+  <h2 style="margin-top:0;">Per user (worst margin first)</h2>
+  <table style="border-collapse:collapse;">
+    <tr>
+      <th style="text-align:left;padding:4px 16px;">User</th>
+      <th style="text-align:right;padding:4px 16px;">Revenue (KES)</th>
+      <th style="text-align:right;padding:4px 16px;">Revenue (USD)</th>
+      <th style="text-align:right;padding:4px 16px;">AI cost (USD)</th>
+      <th style="text-align:right;padding:4px 16px;">Margin (USD)</th>
+    </tr>
+    {% for row in rows %}
+    <tr {% if row.margin_usd < 0 %}style="background:#fff0f0;"{% endif %}>
+      <td style="padding:4px 16px;">{{ row.username }}</td>
+      <td style="text-align:right;padding:4px 16px;">{{ row.revenue_kes|floatformat:0 }}</td>
+      <td style="text-align:right;padding:4px 16px;">${{ row.revenue_usd|floatformat:2 }}</td>
+      <td style="text-align:right;padding:4px 16px;">${{ row.cost_usd|floatformat:4 }}</td>
+      <td style="text-align:right;padding:4px 16px;{% if row.margin_usd < 0 %}color:#b00;font-weight:bold;{% endif %}">
+        ${{ row.margin_usd|floatformat:4 }}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" style="padding:4px 16px;">No revenue or usage recorded yet.</td></tr>
+    {% endfor %}
+  </table>
+  <p style="margin-top:14px;color:#666;font-size:12px;">
+    Revenue converted at {{ kes_per_usd }} KES/USD (see accounts/services/pricing.py). Only
+    <em>successful</em> M-Pesa payments count as revenue. AI cost is user-attributed calls only
+    (LEFT_PANEL + buttons); system calls (cache warmer, dedup) are excluded, so true cost is
+    marginally higher. Rows shaded red = the user costs more in AI than they've paid.
+  </p>
+</div>
+{% endblock %}

@@ -1,9 +1,12 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncDate
+from django.template.response import TemplateResponse
+from django.urls import path
 from django.utils import timezone
 
 from .models import (
@@ -155,3 +158,63 @@ class AIUsageAdmin(admin.ModelAdmin):
             'usage_top_users': top_users,
             'usage_per_label': per_label,
         }
+
+    # ── Margin report: lifetime revenue vs AI cost per user ─────────────────
+    def get_urls(self):
+        custom = [
+            path(
+                'margin/',
+                self.admin_site.admin_view(self.margin_view),
+                name='accounts_aiusage_margin',
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def margin_view(self, request):
+        """Lifetime profitability per user: total M-Pesa revenue (KES->USD)
+        minus total user-attributed AI cost (USD). Sorted worst-first so any
+        user costing more than they pay surfaces at the top."""
+        from .services.pricing import kes_to_usd, KES_PER_USD
+
+        revenue_kes = {
+            r['user']: (r['kes'] or 0)
+            for r in Payment.objects.filter(status='success')
+                                    .values('user').annotate(kes=Sum('amount_kes'))
+        }
+        cost_usd = {
+            r['user']: (r['usd'] or 0)
+            for r in AIUsage.objects.filter(user__isnull=False)
+                                    .values('user').annotate(usd=Sum('cost_usd'))
+        }
+        user_ids = set(revenue_kes) | set(cost_usd)
+        usernames = dict(User.objects.filter(id__in=user_ids).values_list('id', 'username'))
+
+        rows, tot_rev, tot_cost, losers = [], Decimal('0'), Decimal('0'), 0
+        for uid in user_ids:
+            r_usd = kes_to_usd(revenue_kes.get(uid, 0))
+            c_usd = Decimal(cost_usd.get(uid, 0) or 0)
+            margin = r_usd - c_usd
+            if margin < 0:
+                losers += 1
+            rows.append({
+                'username': usernames.get(uid, f'user#{uid}'),
+                'revenue_kes': revenue_kes.get(uid, 0) or 0,
+                'revenue_usd': r_usd,
+                'cost_usd': c_usd,
+                'margin_usd': margin,
+            })
+            tot_rev += r_usd
+            tot_cost += c_usd
+        rows.sort(key=lambda x: x['margin_usd'])  # most negative margin first
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Margin report — revenue vs AI cost (lifetime)',
+            'rows': rows,
+            'total_revenue_usd': tot_rev,
+            'total_cost_usd': tot_cost,
+            'total_margin_usd': tot_rev - tot_cost,
+            'loser_count': losers,
+            'kes_per_usd': KES_PER_USD,
+        }
+        return TemplateResponse(request, 'admin/accounts/aiusage/margin.html', context)
