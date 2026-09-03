@@ -40,6 +40,7 @@ from .dedup import (
     dedupe_against_history, dedupe_similar, dedupe_question_tail, get_recent_user_texts,
     log_ai_usage,
 )
+from .cache_warmer import touch_activity
 
 _FORCED_QUESTION_WORDS = ['What', 'When', 'How', 'Who', 'Which', 'Is', 'Are', 'Do', 'Would', 'Could']
 
@@ -1298,6 +1299,9 @@ def generate_context_aware_response(
         # Cost/cache visibility — grep "AI usage" for every Anthropic call in the
         # app, or "label:LEFT_PANEL" for this path. cache_read > 0 = cache working.
         log_ai_usage(logger, 'LEFT_PANEL', model, response)
+        # Reset the idle timer — real traffic keeps the persona cache warm for
+        # free, so the scheduled warm_cache ping only fires during quiet gaps.
+        touch_activity()
         raw = next((b.text for b in response.content if getattr(b, 'type', '') == 'text'), '')
         register, reply = _parse_reply_json(raw)
         reply = validate_character_voice(reply)
