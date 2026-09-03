@@ -159,3 +159,43 @@ class PremiumEmail(models.Model):
     class Meta:
         verbose_name = 'Premium Email'
         verbose_name_plural = 'Premium Emails'
+
+
+class AIUsage(models.Model):
+    """
+    One row per Anthropic API call, for cost/usage accounting in the admin.
+    Written best-effort by accounts.services.dedup.log_ai_usage — a failed insert
+    never blocks a reply. `user` is nullable because system calls (cache warmer,
+    dedup rewrites) have no user. Token counts come straight from the API's
+    usage object; cost_usd is computed at insert time from accounts.services.pricing.
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='ai_usage'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    label = models.CharField(max_length=32, help_text="LEFT_PANEL, BUTTON_MAIN, WARMUP, DEDUP_*, ...")
+    model = models.CharField(max_length=64)
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    cache_read_tokens = models.IntegerField(default=0)
+    cache_write_tokens = models.IntegerField(default=0)
+    cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+
+    class Meta:
+        verbose_name = 'AI Usage'
+        verbose_name_plural = 'AI Usage'
+        indexes = [
+            models.Index(fields=['created_at'], name='aiusage_created_idx'),
+            models.Index(fields=['user', 'created_at'], name='aiusage_user_created_idx'),
+            models.Index(fields=['label', 'created_at'], name='aiusage_label_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.label} {self.model} ${self.cost_usd}"
+
+    @property
+    def total_tokens(self):
+        return (
+            self.input_tokens + self.output_tokens
+            + self.cache_read_tokens + self.cache_write_tokens
+        )

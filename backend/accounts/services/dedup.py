@@ -19,28 +19,56 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-def log_ai_usage(call_logger, label: str, model: str, response) -> None:
+def log_ai_usage(call_logger, label: str, model: str, response, user_id=None) -> None:
     """Uniform per-call token accounting so EVERY Anthropic call is costable.
 
-    Grep "AI usage" in the logs for every call across the app, or
-    "label:<NAME>" (e.g. label:BUTTON_MAIN) for one specific path. The fields
-    are the exact billing inputs: uncached input tokens, output tokens, cache
-    reads, and cache writes. Never raises — cost logging must never be able to
-    break a user-facing response.
+    Two outputs, both best-effort and independently guarded (neither can break a
+    user-facing response):
+      1. A log line — grep "AI usage" for every call, or "label:<NAME>" for one
+         path. Fields are the exact billing inputs (uncached input, output, cache
+         read, cache write).
+      2. An AIUsage DB row (with computed cost_usd) for the admin dashboard.
+         Pass user_id to attribute the call to a user; omit for system calls
+         (cache warmer, dedup rewrites).
     """
+    u = getattr(response, 'usage', None)
+    if u is None:
+        return
+    inp = getattr(u, 'input_tokens', 0) or 0
+    out = getattr(u, 'output_tokens', 0) or 0
+    cr = getattr(u, 'cache_read_input_tokens', 0) or 0
+    cw = getattr(u, 'cache_creation_input_tokens', 0) or 0
+
     try:
-        u = getattr(response, 'usage', None)
-        if u is None:
-            return
         call_logger.info(
             "AI usage — label:%s model:%s in:%s out:%s cache_read:%s cache_write:%s",
-            label, model,
-            getattr(u, 'input_tokens', 0), getattr(u, 'output_tokens', 0),
-            getattr(u, 'cache_read_input_tokens', 0),
-            getattr(u, 'cache_creation_input_tokens', 0),
+            label, model, inp, out, cr, cw,
         )
     except Exception:
         pass
+
+    try:
+        _persist_usage(label, model, inp, out, cr, cw, user_id)
+    except Exception as e:
+        # Log once (don't silently swallow) but never propagate.
+        logger.warning("AIUsage DB persist failed (label=%s): %s", label, e)
+
+
+def _persist_usage(label, model, inp, out, cr, cw, user_id) -> None:
+    """Write one AIUsage row with computed cost. Imports are deferred to avoid a
+    circular import (accounts.models -> ... -> dedup)."""
+    from accounts.models import AIUsage
+    from accounts.services.pricing import compute_cost
+    AIUsage.objects.create(
+        user_id=user_id,
+        label=label,
+        model=model,
+        input_tokens=inp,
+        output_tokens=out,
+        cache_read_tokens=cr,
+        cache_write_tokens=cw,
+        cost_usd=compute_cost(model, inp, out, cr, cw),
+    )
 
 
 _DEDUP_DAYS = 30

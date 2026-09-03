@@ -1298,11 +1298,26 @@ def generate_context_aware_response(
         )
         # Cost/cache visibility — grep "AI usage" for every Anthropic call in the
         # app, or "label:LEFT_PANEL" for this path. cache_read > 0 = cache working.
-        log_ai_usage(logger, 'LEFT_PANEL', model, response)
+        log_ai_usage(logger, 'LEFT_PANEL', model, response, user_id=user_id)
         # Reset the idle timer — real traffic keeps the persona cache warm for
         # free, so the scheduled warm_cache ping only fires during quiet gaps.
         touch_activity()
         raw = next((b.text for b in response.content if getattr(b, 'type', '') == 'text'), '')
+        # Health signals for "is a rule escaping / did the call really work":
+        #  - REFUSAL: the model declined (safety) — reply will be empty/garbage.
+        #  - EMPTY_GENERATION: no text came back for some other reason.
+        # Grep these to catch silent failures, especially now that we're on Sonnet.
+        _stop = getattr(response, 'stop_reason', None)
+        if _stop == 'refusal':
+            logger.warning(
+                "REFUSAL — LEFT_PANEL model:%s user:%s details:%s",
+                model, user_id, getattr(response, 'stop_details', None),
+            )
+        elif not raw.strip():
+            logger.warning(
+                "EMPTY_GENERATION — LEFT_PANEL model:%s user:%s stop_reason:%s",
+                model, user_id, _stop,
+            )
         register, reply = _parse_reply_json(raw)
         reply = validate_character_voice(reply)
         reply = enforce_char_limit(reply, max_chars=300)

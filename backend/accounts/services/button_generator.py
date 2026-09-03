@@ -1196,7 +1196,13 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             thinking={'type': 'disabled'},
             max_tokens=btn_max_tokens,
         )
-        log_ai_usage(logger, 'BUTTON_MAIN', settings.ANTHROPIC_FAST_MODEL, response)
+        log_ai_usage(logger, 'BUTTON_MAIN', settings.ANTHROPIC_FAST_MODEL, response, user_id=user_id)
+        if getattr(response, 'stop_reason', None) == 'refusal':
+            logger.warning(
+                "REFUSAL — BUTTON_MAIN model:%s user:%s intent:%s details:%s",
+                settings.ANTHROPIC_FAST_MODEL, user_id, button_intent,
+                getattr(response, 'stop_details', None),
+            )
 
         result = next(
             (b.text for b in response.content if getattr(b, 'type', '') == 'text'), ''
@@ -1258,7 +1264,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 thinking={'type': 'disabled'},
                 max_tokens=btn_max_tokens,
             )
-            log_ai_usage(logger, 'BUTTON_RETRY', settings.ANTHROPIC_FAST_MODEL, retry_resp)
+            log_ai_usage(logger, 'BUTTON_RETRY', settings.ANTHROPIC_FAST_MODEL, retry_resp, user_id=user_id)
             retry_result = next(
                 (b.text for b in retry_resp.content if getattr(b, 'type', '') == 'text'), ''
             ).strip()

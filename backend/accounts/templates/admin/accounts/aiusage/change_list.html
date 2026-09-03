@@ -1,0 +1,105 @@
+{% extends "admin/change_list.html" %}
+{% block content %}
+<div class="module" style="margin-bottom:24px;padding:12px 16px;">
+  <h2 style="margin-top:0;">AI usage &amp; cost — last {{ usage_window }} day{{ usage_window|pluralize }}</h2>
+  <p style="margin:4px 0 14px;">
+    Window:
+    <a href="?window_days=1">1 day</a> &middot;
+    <a href="?window_days=14">2 weeks</a> &middot;
+    <a href="?window_days=21">3 weeks</a> &middot;
+    <a href="?window_days=30">30 days</a> &middot;
+    <a href="?window_days=90">90 days</a>
+  </p>
+
+  <h3>System totals</h3>
+  <table style="border-collapse:collapse;">
+    <tr>
+      <th style="text-align:right;padding:4px 12px;">Calls</th>
+      <th style="text-align:right;padding:4px 12px;">Input</th>
+      <th style="text-align:right;padding:4px 12px;">Output</th>
+      <th style="text-align:right;padding:4px 12px;">Cache read</th>
+      <th style="text-align:right;padding:4px 12px;">Cache write</th>
+      <th style="text-align:right;padding:4px 12px;">Cost (USD)</th>
+    </tr>
+    <tr>
+      <td style="text-align:right;padding:4px 12px;">{{ usage_totals.calls|default:0 }}</td>
+      <td style="text-align:right;padding:4px 12px;">{{ usage_totals.in_t|default:0 }}</td>
+      <td style="text-align:right;padding:4px 12px;">{{ usage_totals.out_t|default:0 }}</td>
+      <td style="text-align:right;padding:4px 12px;">{{ usage_totals.cr_t|default:0 }}</td>
+      <td style="text-align:right;padding:4px 12px;">{{ usage_totals.cw_t|default:0 }}</td>
+      <td style="text-align:right;padding:4px 12px;"><strong>${{ usage_totals.cost|default:0|floatformat:4 }}</strong></td>
+    </tr>
+  </table>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:18px;">
+    <div>
+      <h3>Per day</h3>
+      <table style="border-collapse:collapse;">
+        <tr>
+          <th style="text-align:left;padding:4px 12px;">Day</th>
+          <th style="text-align:right;padding:4px 12px;">Calls</th>
+          <th style="text-align:right;padding:4px 12px;">Tokens</th>
+          <th style="text-align:right;padding:4px 12px;">Cost (USD)</th>
+        </tr>
+        {% for d in usage_per_day %}
+        <tr>
+          <td style="padding:4px 12px;">{{ d.day }}</td>
+          <td style="text-align:right;padding:4px 12px;">{{ d.calls }}</td>
+          <td style="text-align:right;padding:4px 12px;">{{ d.tok }}</td>
+          <td style="text-align:right;padding:4px 12px;">${{ d.cost|floatformat:4 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" style="padding:4px 12px;">No usage in window.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div>
+      <h3>Top users by tokens</h3>
+      <table style="border-collapse:collapse;">
+        <tr>
+          <th style="text-align:left;padding:4px 12px;">User</th>
+          <th style="text-align:right;padding:4px 12px;">Calls</th>
+          <th style="text-align:right;padding:4px 12px;">Tokens</th>
+          <th style="text-align:right;padding:4px 12px;">Cost (USD)</th>
+        </tr>
+        {% for u in usage_top_users %}
+        <tr>
+          <td style="padding:4px 12px;">{{ u.user__username|default:"(system)" }}</td>
+          <td style="text-align:right;padding:4px 12px;">{{ u.calls }}</td>
+          <td style="text-align:right;padding:4px 12px;">{{ u.tok }}</td>
+          <td style="text-align:right;padding:4px 12px;">${{ u.cost|floatformat:4 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" style="padding:4px 12px;">No user-attributed usage in window.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div>
+      <h3>By call type</h3>
+      <table style="border-collapse:collapse;">
+        <tr>
+          <th style="text-align:left;padding:4px 12px;">Label</th>
+          <th style="text-align:right;padding:4px 12px;">Calls</th>
+          <th style="text-align:right;padding:4px 12px;">Cost (USD)</th>
+        </tr>
+        {% for l in usage_per_label %}
+        <tr>
+          <td style="padding:4px 12px;">{{ l.label }}</td>
+          <td style="text-align:right;padding:4px 12px;">{{ l.calls }}</td>
+          <td style="text-align:right;padding:4px 12px;">${{ l.cost|floatformat:4 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" style="padding:4px 12px;">No usage in window.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <p style="margin-top:14px;color:#666;font-size:12px;">
+    Cost uses 1-hour cache-write pricing (this app's config). Raw rows are listed below and can be
+    drilled down with the date filter and Label/Model filters.
+  </p>
+</div>
+{{ block.super }}
+{% endblock %}
