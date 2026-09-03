@@ -1284,7 +1284,11 @@ def generate_context_aware_response(
             system=[{
                 'type': 'text',
                 'text': WOMAN_PERSONA_SYSTEM,
-                'cache_control': {'type': 'ephemeral'},
+                # 1h TTL (vs default 5m): the persona is static and reused on
+                # every call, so a longer-lived cache survives quiet-hour gaps
+                # between users. Only pays off on models that actually cache this
+                # prefix (Sonnet caches ~1.8k tokens; Haiku's 4k min does not).
+                'cache_control': {'type': 'ephemeral', 'ttl': '1h'},
             }],
             messages=[{'role': 'user', 'content': user_prompt + extra_instruction}],
             # Sonnet 5 rejects non-default temperature/top_p — never pass them.

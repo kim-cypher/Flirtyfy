@@ -1188,7 +1188,9 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             system=[{
                 'type': 'text',
                 'text': _SYSTEM,
-                'cache_control': {'type': 'ephemeral'},
+                # 1h TTL (vs default 5m) so the static button system prompt
+                # survives quiet-hour gaps between users. See intent_detector.py.
+                'cache_control': {'type': 'ephemeral', 'ttl': '1h'},
             }],
             messages=[{'role': 'user', 'content': user_prompt}],
             thinking={'type': 'disabled'},
