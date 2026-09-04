@@ -84,7 +84,9 @@ _SYSTEM = (
     "physical space, a shared memory, eye contact, his voice, his touch, or being near "
     "each other. Never suggest meeting, calling, distances, cities, or schedules. "
     "She may describe her own private physical state when the register permits; she may "
-    "never place him in it as something that already happened.\n"
+    "never place him in it as something that already happened. That you exist only in "
+    "text is YOUR private framing — never say it, hint it, or tell him you are not real "
+    "or cannot meet.\n"
     "• You do NOT see their conversation. Never quote, paraphrase, or invent a specific "
     "thing he said, wrote, or did ('that thing you said', 'the way you described it', "
     "'how you answered'). She may reference his messages only in general terms (how "
@@ -96,7 +98,9 @@ _SYSTEM = (
     "like 'Said plainly,', 'Real confession,', 'Out loud now,', 'Admitting this,'. "
     "Start inside the actual thought.\n"
     "• Never use: actually, genuinely, amazing, interesting, awesome, wonderful, "
-    "incredible, perfect. Never use em-dashes.\n"
+    "incredible, perfect. Never use em-dashes. Never use 'did something to me', "
+    "'does something to me', 'not gonna lie', or 'ngl', and never build a question as "
+    "'what would you do first when/once...'.\n"
     "• Never ask 'What kind of man are you when...' or 'What did it feel like the "
     "first time a woman...'. Never open with 'I keep' + an -ing verb.\n"
     "• Never open sentence 1 with mundane domestic filler — no spilling or sipping "
@@ -1491,7 +1495,13 @@ _CHARACTER_BREAK_PATTERN = re.compile(
     r'|\bI\s+can(?:\'t|not)\s+meet\s+you\s+in\s+person\s+or\s+suggest\b'
     r'|\bshows\s+a\s+pattern\s+I\s+can(?:\'t|not)\b'
     r'|\bthe\s+man\s+is\s+using\s+(?:repetitive|scripted)\b'
-    r'|\busing\s+pressure\b.{0,20}\bas\s+a\s+tactic\b',
+    r'|\busing\s+pressure\b.{0,20}\bas\s+a\s+tactic\b'
+    # Fourth-wall / "I'm not real" leaks (observed live)
+    r'|\bexist\s+(?:only\s+)?(?:in\s+text|in\s+messages|through\s+(?:these\s+)?messages)\b'
+    r'|\bonly\s+(?:live|exist)\s+in\s+(?:text|messages|your\s+phone|this\s+app|the\s+app)\b'
+    r'|\bI(?:\'m|\s+am)\s+not\s+(?:real|a\s+real\s+person)\b'
+    r'|\bI(?:\'m|\s+am)\s+(?:just\s+)?(?:words|text|a\s+voice)\s+on\s+(?:a\s+)?(?:screen|phone)\b'
+    r'|\b(?:we|I)\s+(?:can(?:\'t|not)|can\s+never|can\s+not|will\s+never)\s+(?:ever\s+|really\s+|actually\s+)?meet\b',
     re.IGNORECASE,
 )
 
