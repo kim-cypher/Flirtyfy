@@ -1266,7 +1266,10 @@ def generate_context_aware_response(
 
     user_prompt = (
         base + context_block + avoid + instruction
-        + "Judge his register, then write her next reply. Output ONLY the JSON."
+        + "Judge his register, then write her next reply. The final sentence MUST be a genuine "
+          "question that begins with a question word or auxiliary verb (What, When, How, Who, "
+          "Which, Why, Is, Are, Do, Would, Could, Have, Will) — not a statement with a question "
+          "mark tacked on. Output ONLY the JSON."
     )
 
     logger.info(
