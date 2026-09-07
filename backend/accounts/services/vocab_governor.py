@@ -39,7 +39,12 @@ _LEARNED_KEY = 'vg:learned'
 # still-hot phrase gets rewritten. No hand-listing — it works for any phrase and
 # caps how many accounts can ever share the same wording within the window.
 _PHRASE_TTL = 12 * 3600    # how long a shipped phrase is "taken" across ALL users
-_PHRASE_NS = (4, 5)        # n-gram lengths tracked as phrases
+# n-gram lengths tracked as phrases. The longer spans (6-7) exist to catch
+# stopword-heavy verbatim REPEATS — especially recycled questions like "are you
+# the type who chases or the type who waits" — that no 4/5-word window can flag
+# under the content-word bar. A 6+ word span shared across accounts is a stock
+# phrase, not coincidence, so this adds coverage without loosening short phrases.
+_PHRASE_NS = (4, 5, 6, 7)
 _PHRASE_MIN_CONTENT = 3    # a tracked phrase must carry >= this many non-stop words
 
 # Seed watch-list: recurring attractor actions/phrases. FREQUENCY-capped here,
