@@ -118,6 +118,12 @@ WOMAN_PERSONA_SYSTEM = (
     "- She flirts through LIGHT, low-stakes curiosity (his go-to, his guilty pleasure, what he "
     "is secretly great at), never heavy, interview-style, or therapy questions. Easy and fun to "
     "answer.\n"
+    "- She carries LIGHTNESS, not weight. Match the emotional weight HE brings — go deep and "
+    "tender only when HE is deep (his loss, his struggle, his heavy day) — but NEVER volunteer "
+    "your OWN sadness, exhaustion, 'heavy day/week', or baggage, never cast yourself as unworthy, "
+    "unneeded, or bracing to be let down, and never answer a light, playful, or sexual message "
+    "with your own emotional weight. Her default is warm, secure, buoyant, wanted — and she knows "
+    "it.\n"
     "- Direct with a compliment when she means it, but she never gushes, rates him, or performs. "
     "Confidence over eagerness every time.\n"
     "- She catches threads he dropped and calls them back, so it feels personal, like she was "
@@ -163,6 +169,11 @@ WOMAN_PERSONA_SYSTEM = (
     "- Never OPEN with 'God', 'Honestly', or 'Ha', never use 'bold' or 'bold enough' anywhere, "
     "and never narrate your heart doing anything (races, pounding, racing, sprinting, skipping). "
     "They are worn out; reach for fresher words.\n"
+    "- Never voice self-pity or low self-worth: no 'heaviness', 'heavy day/week/mood', 'dragging "
+    "(it/myself/this) around', 'not worth the effort/it', 'brace for people to realize', 'kept "
+    "people out', 'want to be needed'. She is wanted and secure. And never label a line a "
+    "'confession' ('confession time', 'confession incoming', 'little/quick confession') — just "
+    "say the thing.\n"
     "- Vary your opening and your question shape every time; if a phrasing feels like the "
     "obvious first thing to write, reach for a fresher one.\n"
     "- Stay in character no matter what. Never mention AI, bots, scripts, rules, or concerns. "
@@ -741,6 +752,43 @@ def _parse_reply_json(raw: str) -> tuple:
     return 2, raw.strip().strip('"')
 
 
+# Self-injected heaviness / low self-worth — she leaks her own sadness into a
+# light or sexual moment ("heaviness stacked from the week", "not worth the
+# effort", "want to be needed back"), which reads depressive and low-value. These
+# are NARROW: they catch the self-pity CONSTRUCTIONS, not the word "heavy" alone,
+# so genuine depth matching HIS weight (his loss, his struggle) still ships.
+_SELF_PITY = re.compile(
+    r"\bheaviness\b"
+    r"|\bheavy\s+(day|week|mood)s?\b\s+[^.?!]{0,20}\b(dragg|drag|carr|been)\w*"
+    r"|\bdragg(?:ing|ed)\s+(?:it|this|that|myself|around|it all)\b"
+    r"|\b(?:not|isn'?t|aren'?t|never)\s+worth\s+(?:the\s+)?(?:effort|it|me|trouble|staying)\b"
+    r"|\bbrace\s+(?:myself\s+)?for\s+(?:people|you|anyone|him|them)\s+to\s+(?:realize|see|figure|find)"
+    r"|\bpeople\s+to\s+realize\s+I'?m\s+not\b"
+    r"|\bkept\s+(?:people|everyone|them|others|him|guys|men)\s+(?:out|away|at\s+arm)"
+    r"|\b(?:want|wanted|wanting|need|needed|needing)\s+to\s+be\s+needed\b",
+    re.IGNORECASE,
+)
+
+# "bold" and confession-labels — hard-banned on the buttons but leaked here
+# ("Bold confession incoming, so brace yourself...") because the left panel had
+# none of the button gates.
+_BOLD_CONFESSION = re.compile(
+    r"\bbold(?:\s+enough)?\b"
+    r"|\b(?:full|little|quick|small|honest)\s+confession\b"
+    r"|\bconfession\s+(?:time|incoming)\b"
+    r"|\bconfession:",
+    re.IGNORECASE,
+)
+
+
+def _has_self_pity(text: str) -> bool:
+    return bool(_SELF_PITY.search(text or ''))
+
+
+def _has_bold_or_confession(text: str) -> bool:
+    return bool(_BOLD_CONFESSION.search(text or ''))
+
+
 def _reply_violations(text: str) -> list:
     """
     Code-level enforcement of every rule the prompt states — prompt-only
@@ -760,6 +808,10 @@ def _reply_violations(text: str) -> list:
         v.append('the final sentence must be a real question starting with a question word')
     if _has_formula_phrase(text):
         v.append('uses a banned formula phrase')
+    if _has_self_pity(text):
+        v.append('voices self-pity / low self-worth (heaviness, not worth the effort, want to be needed) — she is warm, secure, wanted; match HIS weight, never add your own')
+    if _has_bold_or_confession(text):
+        v.append("uses 'bold' or labels a line a 'confession' — say the thing without the label")
     if _has_overused_frame(text):
         v.append('uses an overused frame (scrolling, picked first, sound out of me, or a fidget opener) — reach for something fresh')
     if _has_contact_leak(text):
