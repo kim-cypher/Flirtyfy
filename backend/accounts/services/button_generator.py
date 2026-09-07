@@ -1121,6 +1121,36 @@ def _select_premise(button_intent: str, session_data: dict):
 # voice, no explicit content judgment), so it essentially never refuses.
 # ---------------------------------------------------------------------------
 
+def _premise_opener(client, premise):
+    """A fresh sentence-1 grounded in the rotated premise, for the new_match rescue
+    path — keeps rescues varied instead of falling to a static opener that repeats
+    across users. No grin, no phone/matching. Returns None on failure (caller falls
+    back to the static list). Cheap (Haiku, ~40 tokens)."""
+    model = settings.ANTHROPIC_REWRITE_MODEL
+    prompt = (
+        "Write ONE short opening line (8 to 16 words) a confident woman texts a man she just "
+        "matched with, sprung from this exact real-life situation of hers, in fresh words: "
+        f"{premise}. It is a statement, NOT a question. Do not mention the app, matching, her "
+        "phone or screen, or grinning/smiling at it. Output only the sentence."
+    )
+    try:
+        resp = client.messages.create(
+            model=model,
+            system="You are a precise writing assistant. Output only the one requested sentence.",
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.95,
+            max_tokens=40,
+        )
+        log_ai_usage(logger, 'PREMISE_OPENER', model, resp)
+        out = (resp.content[0].text or '').strip().strip('"').rstrip('.!?, ')
+        if out and not (_GRIN_AT_DEVICE.search(out) or _CONFESSION_LABEL.search(out)):
+            return out
+        return None
+    except Exception as e:
+        logger.warning("premise opener failed: %s", e)
+        return None
+
+
 def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> str | None:
     avoid_snippet = ''
     if avoid_texts:
@@ -1506,8 +1536,10 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                     # Rotate the fallback opener — a FIXED string here shipped
                     # "Something has been on my mind" verbatim across many replies
                     # (a repetition / ban risk), because deflections route through
-                    # this rescue path often.
-                    s1 = random.choice(_RESCUE_OPENERS)
+                    # this rescue path often. Prefer a fresh premise-grounded opener
+                    # (new_match) so rescues stop shipping bland/repeating lines.
+                    fresh = _premise_opener(get_anthropic_client(), premise) if button_intent == 'new_match' else None
+                    s1 = fresh or random.choice(_RESCUE_OPENERS)
 
                 rescue_q = _rescue_question(
                     category, question_word,
