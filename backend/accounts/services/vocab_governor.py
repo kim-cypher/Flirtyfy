@@ -229,6 +229,29 @@ def _rewrite_avoiding(client, text, avoid):
         return None
 
 
+def _flag_count(user_id, text):
+    """How many watched words + hot phrases remain in `text` (0 == clean)."""
+    return len(_find_cooled(user_id, text)) + len(_find_hot_phrases(text))
+
+
+def _best_rewrite(client, user_id, text, avoid, attempts=2):
+    """Try up to `attempts` rewrites; return (best_text, best_flag_count).
+
+    Rewrites are non-deterministic — one roll can still echo a flagged phrase —
+    so we keep the cleanest of a couple of tries and stop early on a clean one."""
+    best, best_score = None, None
+    for _ in range(attempts):
+        cand = _rewrite_avoiding(client, text, avoid)
+        if not cand:
+            continue
+        score = _flag_count(user_id, cand)
+        if best is None or score < best_score:
+            best, best_score = cand, score
+        if best_score == 0:
+            break
+    return best, best_score
+
+
 def enforce(client, user_id, text):
     """Two cooldowns in one pass, both best-effort:
 
@@ -236,23 +259,34 @@ def enforce(client, user_id, text):
       2. PHRASES — distinctive multi-word n-grams shipped to ANY user within the
          phrase window (cross-account fingerprint protection).
 
-    If either fires, one small rewrite drops the offending wording; then the final
-    text's words and phrases are recorded so future generations space them out.
-    Returns the (possibly rewritten) text. Never raises."""
+    If either fires, rewrite to drop the offending wording; then record the final
+    text's words and phrases so future generations space them out. Returns the
+    (possibly rewritten) text. Never raises.
+
+    Key rule: we only keep the ORIGINAL if no rewrite is strictly better. The
+    original IS the repeat we're trying to kill, so a partially-improved rewrite
+    always beats shipping the exact phrase again."""
     try:
         cooled = _find_cooled(user_id, text)
         hot = _find_hot_phrases(text)
         avoid = _human_list(cooled) + hot
         if avoid:
-            rewritten = _rewrite_avoiding(client, text, avoid)
-            if rewritten and not _find_cooled(user_id, rewritten) and not _find_hot_phrases(rewritten):
-                logger.info(
-                    "VocabGovernor cleaned — user:%s words:%s phrases:%s", user_id, cooled, hot
-                )
-                text = rewritten
+            orig_score = len(cooled) + len(hot)
+            cand, cand_score = _best_rewrite(client, user_id, text, avoid)
+            if cand is not None and cand_score < orig_score:
+                if cand_score == 0:
+                    logger.info(
+                        "VocabGovernor cleaned — user:%s words:%s phrases:%s", user_id, cooled, hot
+                    )
+                else:
+                    logger.info(
+                        "VocabGovernor reduced — user:%s %s->%s flags (words:%s phrases:%s)",
+                        user_id, orig_score, cand_score, cooled, hot,
+                    )
+                text = cand
             else:
                 logger.info(
-                    "VocabGovernor could not fully clear — user:%s words:%s phrases:%s (shipping)",
+                    "VocabGovernor could not improve — user:%s words:%s phrases:%s (shipping original)",
                     user_id, cooled, hot,
                 )
         _record(user_id, text)
