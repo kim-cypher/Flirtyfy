@@ -673,14 +673,22 @@ BUTTON_INTENTS = {
         'name': '✨ New Match',
         'row': 1,
         'prompt': (
-            "They just matched and exchanged hellos — nothing has been said yet beyond that. "
-            "Now SHE sends the first real message to get things going. IMPORTANT: she has no idea "
-            "who he is yet, so she must NOT reference anything he said, invent a scene, a place, "
-            "a photo, or assume anything about him — there is nothing to go on. "
-            "It is simply a warm, light, curious opener that makes him want to reply: genuine "
-            "interest in getting to know him — what brought him here, how his day is going, the "
-            "kind of easy question a man answers because it feels effortless and different. "
-            "Keep it simple and welcoming. No heavy desire, no assumptions."
+            "They just matched and exchanged hellos, nothing has been said yet beyond that. "
+            "Now SHE sends the first real message, and it is engineered to make replying almost "
+            "irresistible. She knows nothing about him yet, so she must NOT quote him, invent a "
+            "shared scene, a place, a photo, or a fact about him. Instead she uses how a confident "
+            "woman actually hooks a man cold:\n"
+            "CHOSEN: it lands like she picked HIM on purpose and made the first move, so he feels "
+            "singled out, never mass-messaged.\n"
+            "PRESUMPTIVE: she writes as if the spark is already real and mutual, no permission "
+            "asked, no timid 'hi how are you'. Confident, a little cocky, warm.\n"
+            "CHARGE NOW: sentence 1 is a vivid present-tense flash of HER, her mood, her nerve, "
+            "what she feels as she types this, carrying real pull and suggestion, delivered in "
+            "words right here. Suggestive, never graphic.\n"
+            "EASY OUT: end on ONE effortless, presumptive question about HIM that is fun and almost "
+            "automatic to answer and keeps him in the thread.\n"
+            "The entire pull lives in these messages: never invite him over, never host, meet, "
+            "schedule, name a time, or place him in a physical scene."
         ),
     },
     'vulnerability': {
@@ -716,7 +724,7 @@ BUTTON_INTENTS = {
 # ---------------------------------------------------------------------------
 
 _ROW_REGISTER = {
-    1: 'Warm and flirty. Playful chemistry, light suggestion at most. Nothing sexual.',
+    1: 'Confident and charged. Presumptive, playful, a little cocky, with clear suggestion and pull; she owns the spark. Suggestive, never graphic, and no explicit sexual words on a cold open.',
     2: 'Warm and emotionally intimate. Honest feeling, no sexual content.',
     3: 'Light, warm, playful. Everyday life energy. Nothing sexual.',
     4: 'Romantic and sensual, purely IMAGINED future scenes. Desire may be felt, never graphic.',
@@ -1096,11 +1104,11 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     if button_intent == 'new_match':
         domain, subtopic = _select_new_match_topic(session_data)
         user_prompt += (
-            f'\n\nGround her opener in ONE concrete territory so she always has a real, easy thing '
-            f'to ask — {domain.upper()}: specifically, {subtopic}. Build a warm, light, curious '
-            f'first message around exactly that, in her own fresh words, ending in one effortless '
-            f'question. She knows nothing about him yet, so assume nothing and reference nothing he '
-            f'said. Never use the word "profile" or "bio", and never reuse a phrase from a previous message.'
+            f'\n\nLet her easy closing question draw from ONE concrete territory so it never runs '
+            f'dry: {domain.upper()}, specifically {subtopic}. Keep sentence 1 the charged, present-'
+            f'tense flash of HER described above; let the territory shape only the question. She '
+            f'knows nothing about him yet, so assume nothing and reference nothing he said. Never '
+            f'use the word "profile" or "bio", and never reuse a phrase from a previous message.'
         )
     elif button_intent == 'vulnerability':
         domain, subtopic = _select_vulnerability_topic(session_data)
