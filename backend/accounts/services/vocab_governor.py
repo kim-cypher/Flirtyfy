@@ -16,6 +16,7 @@ Deliberately NOT the old DB-backed VocabCooldown/NgramLog (deleted in migration
 never raises — a governor failure must never block a reply.
 """
 import re
+import hashlib
 import logging
 
 from django.core.cache import cache
@@ -27,6 +28,19 @@ _GLOBAL_TTL = 20 * 60      # soft cross-user spacing to blunt burst fingerprints
 _LEARN_TTL = 6 * 3600      # rolling window for bigram frequency counting
 _LEARN_THRESHOLD = 8       # bigram occurrences in the window that promote it
 _LEARNED_KEY = 'vg:learned'
+
+# ── Cross-user phrase cooldown ──────────────────────────────────────────────
+# The word watch-list above catches single attractor words. This catches whole
+# multi-word PHRASES ("my mind keeps drifting back", "who makes the first move")
+# that the per-user dedup layers can't see: those compare a user only to their
+# OWN history, so a stock phrase can ship to many DIFFERENT accounts unnoticed —
+# a cross-account fingerprint. Here, every shipped reply's distinctive n-grams
+# are recorded in a GLOBAL (all-users) cooldown; any later reply that reuses a
+# still-hot phrase gets rewritten. No hand-listing — it works for any phrase and
+# caps how many accounts can ever share the same wording within the window.
+_PHRASE_TTL = 12 * 3600    # how long a shipped phrase is "taken" across ALL users
+_PHRASE_NS = (4, 5)        # n-gram lengths tracked as phrases
+_PHRASE_MIN_CONTENT = 3    # a tracked phrase must carry >= this many non-stop words
 
 # Seed watch-list: recurring attractor actions/phrases. FREQUENCY-capped here,
 # not banned (hard bans live in the prompts/gates). id -> regex.
@@ -126,19 +140,76 @@ def _learn(text):
             continue
 
 
-def _human(tids):
+def _phrase_words(text):
+    return re.sub(r'[^a-z\s]', ' ', (text or '').lower()).split()
+
+
+def _salient_phrases(text):
+    """Distinctive content n-grams in `text` -> {phrase: global_cache_key}.
+
+    Keeps only n-grams carrying enough non-stopword tokens to be a real
+    fingerprint (generic connective phrases like "are you the one who" are
+    skipped), so normal language isn't sterilised — only recurring stock wording."""
+    words = _phrase_words(text)
+    out = {}
+    for n in _PHRASE_NS:
+        for i in range(len(words) - n + 1):
+            gram = words[i:i + n]
+            if sum(1 for w in gram if w not in _STOP) < _PHRASE_MIN_CONTENT:
+                continue
+            phrase = ' '.join(gram)
+            out[phrase] = 'vg:p:' + hashlib.md5(phrase.encode('utf-8')).hexdigest()[:16]
+    return out
+
+
+def _find_hot_phrases(text):
+    """Salient phrases in `text` recently shipped to ANY user (cross-user cooldown).
+    Returns raw phrase strings, longest-first with contained overlaps collapsed."""
+    salient = _salient_phrases(text)
+    if not salient:
+        return []
+    try:
+        present = cache.get_many(list(salient.values()))
+    except Exception:
+        return []
+    hot = sorted((ph for ph, key in salient.items() if key in present), key=len, reverse=True)
+    kept = []
+    for ph in hot:
+        if not any(ph in longer for longer in kept):
+            kept.append(ph)
+    return kept
+
+
+def _record_phrases(text):
+    """Mark this shipped reply's distinctive phrases as globally taken."""
+    salient = _salient_phrases(text)
+    if not salient:
+        return
+    try:
+        cache.set_many({key: 1 for key in salient.values()}, _PHRASE_TTL)
+    except Exception:
+        pass
+
+
+def _human_list(tids):
     """Turn internal term ids into plain hints for the rewrite prompt."""
-    return ', '.join(sorted({t.split(':', 1)[-1].replace('_', ' ') for t in tids}))
+    return sorted({t.split(':', 1)[-1].replace('_', ' ') for t in tids})
 
 
-def _rewrite_avoiding(client, text, cooled):
+def _human(tids):
+    return ', '.join(_human_list(tids))
+
+
+def _rewrite_avoiding(client, text, avoid):
     from django.conf import settings
     from accounts.services.dedup import log_ai_usage
     model = getattr(settings, 'ANTHROPIC_REWRITE_MODEL', 'claude-haiku-4-5')
+    avoid_str = '; '.join(avoid)
     prompt = (
-        "Rewrite this dating-app message so it keeps the same meaning, tone, and its "
-        "closing question, but avoids these overused ideas/words entirely: "
-        f"{_human(cooled)}. Keep it two sentences, natural, ending in a real question.\n\n"
+        "Rewrite this dating-app message so it keeps the same meaning, tone, length, "
+        "and its closing question, but avoids these overused words/phrases entirely — "
+        f"do not reuse them or a close paraphrase: {avoid_str}.\n"
+        "Keep the same number of sentences, natural, ending in a real question.\n\n"
         f"Message: \"{(text or '').strip()}\"\n\n"
         "Output only the rewritten message, nothing else."
     )
@@ -159,19 +230,33 @@ def _rewrite_avoiding(client, text, cooled):
 
 
 def enforce(client, user_id, text):
-    """Cooldown enforcement. If a watched term in `text` is on cooldown, rewrite to
-    drop it (best-effort); then record usage so future generations space it out.
+    """Two cooldowns in one pass, both best-effort:
+
+      1. WORDS — watched attractor words on per-user (24h) / global (20m) cooldown.
+      2. PHRASES — distinctive multi-word n-grams shipped to ANY user within the
+         phrase window (cross-account fingerprint protection).
+
+    If either fires, one small rewrite drops the offending wording; then the final
+    text's words and phrases are recorded so future generations space them out.
     Returns the (possibly rewritten) text. Never raises."""
     try:
         cooled = _find_cooled(user_id, text)
-        if cooled:
-            rewritten = _rewrite_avoiding(client, text, cooled)
-            if rewritten and not _find_cooled(user_id, rewritten):
-                logger.info("VocabGovernor cooled -> rewrote — user:%s terms:%s", user_id, cooled)
+        hot = _find_hot_phrases(text)
+        avoid = _human_list(cooled) + hot
+        if avoid:
+            rewritten = _rewrite_avoiding(client, text, avoid)
+            if rewritten and not _find_cooled(user_id, rewritten) and not _find_hot_phrases(rewritten):
+                logger.info(
+                    "VocabGovernor cleaned — user:%s words:%s phrases:%s", user_id, cooled, hot
+                )
                 text = rewritten
             else:
-                logger.info("VocabGovernor could not clear — user:%s terms:%s (shipping)", user_id, cooled)
+                logger.info(
+                    "VocabGovernor could not fully clear — user:%s words:%s phrases:%s (shipping)",
+                    user_id, cooled, hot,
+                )
         _record(user_id, text)
+        _record_phrases(text)
         return text
     except Exception as e:
         logger.warning("VocabGovernor enforce failed: %s", e)

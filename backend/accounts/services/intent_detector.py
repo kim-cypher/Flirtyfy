@@ -41,6 +41,7 @@ from .dedup import (
     log_ai_usage,
 )
 from .cache_warmer import touch_activity
+from . import vocab_governor
 
 _FORCED_QUESTION_WORDS = ['What', 'When', 'How', 'Who', 'Which', 'Is', 'Are', 'Do', 'Would', 'Could']
 
@@ -1433,6 +1434,10 @@ def generate_context_aware_response(
             result, was_tail_rewritten = dedupe_question_tail(get_anthropic_client(), user_id, result)
             if was_tail_rewritten:
                 logger.info(f"Left-panel question-tail rewrite applied — user:{user_id}")
+
+            # Word + cross-user phrase governor (the only layer that spaces stock
+            # wording ACROSS accounts, not just within this user's own history).
+            result = vocab_governor.enforce(get_anthropic_client(), user_id, result)
 
         logger.info(
             f"Left-panel reply — topic:{topic} tone:{tone} "
