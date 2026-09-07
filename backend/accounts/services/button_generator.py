@@ -108,8 +108,9 @@ _SYSTEM = (
     "coffee or tea, doing laundry, procrastinating, scrolling a feed, being in the "
     "kitchen, or 'not gonna lie'/'ngl'. Sentence 1 must be an actual hook: a vivid, "
     "specific, or revealing thought or feeling — never a chore, never a cliche.\n"
-    "• When describing a physical reaction, rotate the location (throat, stomach, "
-    "spine, hands, skin, breath, legs) — never default to the same one.\n"
+    "• When describing a physical reaction, NEVER default to the chest ('my chest "
+    "feels lit up', 'my chest tightens'); rotate and vary the location (throat, "
+    "stomach, spine, hands, skin, breath, knees, legs) and never repeat one.\n"
     "• The speaker is a WOMAN — never use male arousal language for her body.\n"
     "• Plain, common, everyday words. Text-message tone. End with a question mark, and "
     "the question must start with a real question word or auxiliary verb — never a "
@@ -999,9 +1000,12 @@ def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> s
             + '\n'.join(f'- {t}' for t in sample)
         )
     prompt = (
-        f"Write ONE original question a woman would text a man on a dating app.\n"
+        f"Write ONE original, confident, flirty question a woman would text a man she "
+        f"deliberately picked on a dating app.\n"
         f"10-16 words. Must start with the word \"{question_word}\".\n"
-        f"Category: {category['label']} — {category['instruction']}"
+        f"Category: {category['label']} — {category['instruction']}\n"
+        f"Never use these words: actually, genuinely, honestly, amazing, interesting. "
+        f"Never build it as 'what would you do first when/once'."
         f"{avoid_snippet}\n\n"
         "Output only the question itself, nothing else, ending with a question mark."
     )
@@ -1243,24 +1247,33 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             parts = re.split(r'(?<=[.!?])\s+', t.strip())
             return len(parts) == 2
 
-        def _result_is_bad(t: str) -> bool:
-            return (
-                _is_refusal(t)
-                or not _is_genuine_question(t)
-                or not _has_two_sentences(t)
-                or _has_contact_leak(t)
-                or _has_physical_reality_intrusion(t)
-                or _has_perception_leak(t)
-                or _has_meeting_fantasy(t)
-                or _has_male_anatomy_language(t)
-                or _has_formula_phrase(t)
-                or _has_overused_frame(t)
-                or _has_temporal_leak(t)
-                or _has_time_mention(t)
-                or _has_logistics_leak(t)
-            )
+        def _bad_reasons(t: str) -> list:
+            checks = [
+                ('refusal', _is_refusal(t)),
+                ('not_genuine_question', not _is_genuine_question(t)),
+                ('not_two_sentences', not _has_two_sentences(t)),
+                ('contact_leak', _has_contact_leak(t)),
+                ('physical_reality_intrusion', _has_physical_reality_intrusion(t)),
+                ('perception_leak', _has_perception_leak(t)),
+                ('meeting_fantasy', _has_meeting_fantasy(t)),
+                ('male_anatomy', _has_male_anatomy_language(t)),
+                ('formula_phrase', _has_formula_phrase(t)),
+                ('overused_frame', _has_overused_frame(t)),
+                ('temporal_leak', _has_temporal_leak(t)),
+                ('time_mention', _has_time_mention(t)),
+                ('logistics_leak', _has_logistics_leak(t)),
+            ]
+            return [name for name, failed in checks if failed]
 
-        if _result_is_bad(result):
+        def _result_is_bad(t: str) -> bool:
+            return bool(_bad_reasons(t))
+
+        _main_reasons = _bad_reasons(result)
+        if _main_reasons:
+            logger.info(
+                f"Button gate rejected MAIN — user:{user_id} intent:{button_intent} "
+                f"reasons:{_main_reasons}"
+            )
             retry_prompt = (
                 f"Write a short text message a woman sends to a man she is attracted to on a dating app.\n\n"
                 f"Context: {intent_config['prompt']}\n\n"
@@ -1302,6 +1315,10 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
             if not _result_is_bad(retry_result):
                 result = retry_result
             else:
+                logger.info(
+                    f"Button gate rejected RETRY -> rescue — user:{user_id} "
+                    f"intent:{button_intent} reasons:{_bad_reasons(retry_result)}"
+                )
                 # Both attempts failed validation — rescue: regenerate ONLY the question
                 # with a tightly-scoped LLM call instead of grabbing a canned string.
                 # This is what actually prevents repeated text from reaching the user.
