@@ -987,6 +987,130 @@ def _select_opener_style(button_intent: str, session_data: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Premise bank — per-button pool of SCENARIO seeds for sentence 1.
+#
+# Why: with a free "flash of her" and no seeded scenario, the model converges on
+# its own favorite premise (e.g. "grinning at my phone") across users — which at
+# scale becomes a platform-detectable fingerprint. Rotating a different premise
+# into every generation moves the variety to the INPUT layer: 40+ premises x the
+# opener styles x the per-user avoid-list = effectively unlimited, non-repeating
+# openers. These are abstract SITUATIONS (directions the model expands in its own
+# fresh words), never fixed phrasings — so they seed variety without becoming new
+# templates. AI-generated once, curated; extend the lists any time.
+# ---------------------------------------------------------------------------
+
+_PREMISE_BANKS = {
+    'new_match': [
+        'still buzzing from a hard workout',
+        'just back from a long walk that cleared her head',
+        'fresh out of a hot shower, warm and loose',
+        'dancing alone to something far too loud',
+        'a song just wrecked her in the best way',
+        'stuck on a lyric that hit too close',
+        'craving something she knows is trouble',
+        'just cooked something ambitious that actually worked',
+        'watching the rain and feeling restless',
+        'people-watching and feeling quietly bold',
+        'a reckless-summer memory surfaced out of nowhere',
+        'thinking about the last time she felt truly chased',
+        "in a daring mood she can't quite explain",
+        'feeling untouchable and a little dangerous',
+        'done being polite, in the mood to be a little bad',
+        'just decided she is tired of men who play it safe',
+        'realized she wants to be pursued, not managed',
+        'laughing at her own terrible luck',
+        'a ridiculous thought she has to tell someone',
+        'that electric nerve right before saying something reckless',
+        'a slow ache to talk to someone who can keep up',
+        'just won a pointless argument and feeling smug',
+        'nailed something today and wants to be admired for it',
+        'a small chaotic disaster she is weirdly proud of',
+        'restless and hunting for a spark',
+        'feeling reckless enough to make the first move for once',
+        'curious in the way that always gets her in trouble',
+        'a compliment from a stranger left her feeling lit up',
+        "midway through a book she can't put down",
+        'sore in the good way after trying something new',
+        'caught herself daydreaming about being wanted',
+        'in the mood to test someone and see who flinches',
+        'feeling like causing a little good trouble',
+        'just realized how boring safe men are to her',
+        'wired, confident, and slightly impatient',
+        'a wave of missing being flirted with properly',
+        'feeling like the most interesting person in the room',
+        'just talked herself into being brave',
+        'a craving for banter that actually lands',
+        'feeling playful and a touch merciless',
+    ],
+    'vulnerability': [
+        'a quiet honesty that surprised even her',
+        'a truth she usually keeps armored',
+        'a soft spot she rarely lets anyone see',
+        'something easier to admit to a stranger',
+        'a fear she is tired of hiding',
+        'a want she feels a little ashamed of',
+        'the version of her that shows up when she cannot sleep',
+        'a thing she protects because it has been used against her',
+        'an ache she does not usually name',
+        'a confession that costs her something to say',
+        'the tenderness under all her armor',
+        'a need she is bad at asking for',
+        'something raw she is choosing to trust him with',
+        'the part of her that gets attached too fast',
+        'a loneliness she dresses up as independence',
+        'a hope she is scared to say out loud',
+        'the way she loves harder than she admits',
+        'a memory that still stings a little',
+        'a truth about what she actually craves in someone',
+        'the fear that she is too much, or not enough',
+        'a soft thing she almost talked herself out of saying',
+        'what she is like when she stops performing',
+    ],
+    'reply_trigger': [
+        'a playful mock-outrage that he went quiet',
+        'wounded but clearly amused',
+        'a teasing accusation about his disappearing act',
+        'acting like she is giving him one last chance',
+        'mock-offended that she is the one texting twice',
+        'a light dare to see if he will rise to it',
+        'playing it cool while obviously not',
+        'a warm jab about his terrible timing',
+        'pretending she has already moved on when she has not',
+        'a cheeky reminder of what he is ignoring',
+        'faux-patience wearing thin in a fun way',
+        "a smirking 'so this is how it is going to be'",
+        'a playful ultimatum with a soft edge',
+        'teasing him for making her wait',
+        'unbothered on the surface, throwing a hook underneath',
+        "a light 'you are really testing me' energy",
+        'mock-disappointed but leaving the door wide open',
+        'a witty nudge that dares him back in',
+        "a confident 'your loss, unless...' angle",
+        'calling out his silence with humor, never need',
+        'a playful challenge to earn her attention back',
+        'amused that she noticed, and letting him know',
+    ],
+}
+
+
+def _select_premise(button_intent: str, session_data: dict):
+    """Per-button rotation over the premise bank — cycles the whole bank before
+    any repeat (mirrors the opener-style / question-word rotation). Returns None
+    if the button has no bank."""
+    bank = _PREMISE_BANKS.get(button_intent)
+    if not bank:
+        return None
+    key = f'premise_{button_intent}'
+    remaining = [p for p in session_data.get(key, []) if p in bank]
+    if not remaining:
+        remaining = list(bank)
+        random.shuffle(remaining)
+    chosen = remaining.pop(0)
+    session_data[key] = remaining
+    return chosen
+
+
+# ---------------------------------------------------------------------------
 # Rescue question generation — used only when both primary generation
 # attempts fail validation. Instead of grabbing a canned string (which is
 # exactly the kind of literal repeated text that gets flagged), this makes
@@ -1094,6 +1218,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     category        = _select_question_category(button_intent, session_data)
     tone            = _select_tone(button_intent, session_data)
     question_word   = _select_question_word(button_intent, session_data)
+    premise         = _select_premise(button_intent, session_data) or 'a specific, real moment of her own right now'
 
     # ── Step 2: Build prompt ───────────────────────────────────────────────
     intent_config = BUTTON_INTENTS[button_intent]
@@ -1113,26 +1238,30 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     if button_intent == 'new_match':
         domain, subtopic = _select_new_match_topic(session_data)
         user_prompt += (
-            f'\n\nLet her easy closing question draw from ONE concrete territory so it never runs '
-            f'dry: {domain.upper()}, specifically {subtopic}. Keep sentence 1 the charged, present-'
-            f'tense flash of HER described above; let the territory shape only the question. She '
-            f'knows nothing about him yet, so assume nothing and reference nothing he said. Never '
-            f'use the word "profile" or "bio", and never reuse a phrase from a previous message.'
+            f'\n\nGROUND SENTENCE 1 in THIS exact situation, in your own fresh words (do not copy '
+            f'this wording, just spring from it): {premise}. Build the charged, chosen, present-tense '
+            f'flash of HER out of it. Then let her easy closing question draw from ONE concrete '
+            f'territory so it never runs dry: {domain.upper()}, specifically {subtopic}. She knows '
+            f'nothing about him yet, so assume nothing and reference nothing he said. Never use the '
+            f'word "profile" or "bio", and never reuse a phrase from a previous message.'
         )
     elif button_intent == 'vulnerability':
         domain, subtopic = _select_vulnerability_topic(session_data)
         user_prompt += (
-            f'\n\nGround her confession in ONE specific territory so it never repeats — '
-            f'{domain.upper()}: {subtopic}. She admits it plainly, without softening it, then asks '
-            f'him to that same unguarded place. Invent your own fresh words, never reuse a phrase.'
+            f'\n\nLet the entry-point and texture of her confession be THIS, in your own fresh words '
+            f'(do not copy this wording, just spring from it): {premise}. Ground the confession '
+            f'itself in ONE specific territory so it never repeats: {domain.upper()}: {subtopic}. '
+            f'She admits it plainly, without softening it, then asks him to that same unguarded '
+            f'place. Invent your own fresh words, never reuse a phrase.'
         )
     elif button_intent == 'reply_trigger':
         domain, subtopic = _select_trigger_topic(session_data)
         user_prompt += (
-            f'\n\nGround her nudge in ONE specific feeling-angle so it never repeats — '
-            f'{domain.upper()}: {subtopic}. Play it with light feeling only — never a declaration of '
-            f'love, never desperate — and end in one easy, disarming question. Invent your own fresh '
-            f'words, never reuse a phrase.'
+            f'\n\nLet the angle of her nudge be THIS, in your own fresh words (do not copy this '
+            f'wording, just spring from it): {premise}. Ground it in ONE specific feeling-angle so '
+            f'it never repeats: {domain.upper()}: {subtopic}. Play it with light feeling only — '
+            f'never a declaration of love, never desperate — and end in one easy, disarming '
+            f'question. Invent your own fresh words, never reuse a phrase.'
         )
 
     if used_themes:
