@@ -1199,6 +1199,13 @@ _GRIN_AT_DEVICE = re.compile(
 # prompt-level ban is ignored by the model nearly every time.
 _NOT_GONNA_LIE = re.compile(r'\bnot gonna lie\b|\bngl\b', re.IGNORECASE)
 
+# "confession time" / "full confession" / "confession:" — the announce-a-confession
+# opener label the model overuses. Hard-gated (the word "confession" elsewhere is fine).
+_CONFESSION_LABEL = re.compile(
+    r'\b(?:full|little|quick|small|honest)\s+confession\b|\bconfession\s+time\b|\bconfession\s*:',
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Response generation
@@ -1412,11 +1419,14 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 ('male_anatomy', _has_male_anatomy_language(t)),
                 ('formula_phrase', _has_formula_phrase(t)),
                 ('overused_frame', _has_overused_frame(t)),
-                ('temporal_leak', _has_temporal_leak(t)),
-                ('time_mention', _has_time_mention(t)),
+                # reply_trigger is inherently about time ("left on read", "two
+                # minutes") — exempt it from the time gates so it stops retrying.
+                ('temporal_leak', button_intent != 'reply_trigger' and _has_temporal_leak(t)),
+                ('time_mention', button_intent != 'reply_trigger' and _has_time_mention(t)),
                 ('logistics_leak', _has_logistics_leak(t)),
                 ('grin_at_device', bool(_GRIN_AT_DEVICE.search(t))),
                 ('not_gonna_lie', bool(_NOT_GONNA_LIE.search(t))),
+                ('confession_label', bool(_CONFESSION_LABEL.search(t))),
             ]
             return [name for name, failed in checks if failed]
 
@@ -1489,7 +1499,10 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 # check, a formula-phrase sentence 1 (e.g. "I keep replaying...")
                 # that triggered the retry in the first place would still ship,
                 # just with a fresh question bolted onto it.
-                if _is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1) or _has_temporal_leak(s1):
+                if (_is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1)
+                        or _GRIN_AT_DEVICE.search(s1) or _NOT_GONNA_LIE.search(s1)
+                        or _CONFESSION_LABEL.search(s1)
+                        or (button_intent != 'reply_trigger' and _has_temporal_leak(s1))):
                     # Rotate the fallback opener — a FIXED string here shipped
                     # "Something has been on my mind" verbatim across many replies
                     # (a repetition / ban risk), because deflections route through
