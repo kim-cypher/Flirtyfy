@@ -1189,11 +1189,15 @@ def _character_break_fallback(user_id: int, button_intent: str, time_slot: str =
 # model keeps producing even when the prompt bans it — gated (not just prompted)
 # because Sonnet ignores the prompt rule ~half the time on the new_match opener.
 _GRIN_AT_DEVICE = re.compile(
-    r'\b(?:grin|grinning|smil(?:e|es|ing)|beaming)\b[^.?!]{0,30}\b(?:phone|screen|name|match(?:es)?)\b'
-    r'|\bgrin(?:ning)?\b[^.?!]{0,20}\blike\s+an?\s+(?:fool|idiot)\b'
-    r'|\b(?:wipe|hide|contain)\b[^.?!]{0,15}\bgrin\b',
+    r'\b(?:grin|grins|grinned|grinning|smil(?:e|es|ed|ing)|beaming)\b[^.?!]{0,30}\b(?:phone|screen|name|match(?:es)?)\b'
+    r'|\b(?:grin|grins|grinned|grinning|smil(?:e|es|ed|ing))\b[^.?!]{0,20}\blike\s+an?\s+(?:fool|idiot)\b'
+    r'|\b(?:wipe|hide|contain|shake)\b[^.?!]{0,15}\bgrin\b',
     re.IGNORECASE,
 )
+
+# "not gonna lie" / "ngl" — a phrase the user considers NEVER; gate it, since the
+# prompt-level ban is ignored by the model nearly every time.
+_NOT_GONNA_LIE = re.compile(r'\bnot gonna lie\b|\bngl\b', re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -1412,6 +1416,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 ('time_mention', _has_time_mention(t)),
                 ('logistics_leak', _has_logistics_leak(t)),
                 ('grin_at_device', bool(_GRIN_AT_DEVICE.search(t))),
+                ('not_gonna_lie', bool(_NOT_GONNA_LIE.search(t))),
             ]
             return [name for name, failed in checks if failed]
 
