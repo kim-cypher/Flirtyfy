@@ -1184,6 +1184,17 @@ def _character_break_fallback(user_id: int, button_intent: str, time_slot: str =
     return fallback_result.get('response', _CHARACTER_BREAK_LAST_RESORT)
 
 
+# Enforcement backstop for the "grinning at my phone / your name" attractor the
+# model keeps producing even when the prompt bans it — gated (not just prompted)
+# because Sonnet ignores the prompt rule ~half the time on the new_match opener.
+_GRIN_AT_DEVICE = re.compile(
+    r'\b(?:grin|grinning|smil(?:e|es|ing)|beaming)\b[^.?!]{0,30}\b(?:phone|screen|name|match(?:es)?)\b'
+    r'|\bgrin(?:ning)?\b[^.?!]{0,20}\blike\s+an?\s+(?:fool|idiot)\b'
+    r'|\b(?:wipe|hide|contain)\b[^.?!]{0,15}\bgrin\b',
+    re.IGNORECASE,
+)
+
+
 # ---------------------------------------------------------------------------
 # Response generation
 # ---------------------------------------------------------------------------
@@ -1238,12 +1249,15 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
     if button_intent == 'new_match':
         domain, subtopic = _select_new_match_topic(session_data)
         user_prompt += (
-            f'\n\nGROUND SENTENCE 1 in THIS exact situation, in your own fresh words (do not copy '
-            f'this wording, just spring from it): {premise}. Build the charged, chosen, present-tense '
-            f'flash of HER out of it. Then let her easy closing question draw from ONE concrete '
-            f'territory so it never runs dry: {domain.upper()}, specifically {subtopic}. She knows '
-            f'nothing about him yet, so assume nothing and reference nothing he said. Never use the '
-            f'word "profile" or "bio", and never reuse a phrase from a previous message.'
+            f'\n\nSentence 1 IS this exact situation of hers, in your own fresh words (do not copy '
+            f'this wording, just live inside it): {premise}. Write it as that real moment — do NOT '
+            f'mention the app, matching, swiping, her phone or screen, or grinning/smiling at it. '
+            f'The charge and the sense that she chose HIM come through the moment itself and how she '
+            f'turns it toward him, never from describing herself reacting to the app. Then one easy '
+            f'closing question drawn from ONE concrete territory so it never runs dry: '
+            f'{domain.upper()}, specifically {subtopic}. She knows nothing about him yet, so assume '
+            f'nothing and reference nothing he said. Never use the word "profile" or "bio", and '
+            f'never reuse a phrase from a previous message.'
         )
     elif button_intent == 'vulnerability':
         domain, subtopic = _select_vulnerability_topic(session_data)
@@ -1396,6 +1410,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 ('temporal_leak', _has_temporal_leak(t)),
                 ('time_mention', _has_time_mention(t)),
                 ('logistics_leak', _has_logistics_leak(t)),
+                ('grin_at_device', bool(_GRIN_AT_DEVICE.search(t))),
             ]
             return [name for name, failed in checks if failed]
 
