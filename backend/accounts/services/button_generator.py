@@ -24,6 +24,7 @@ from .dedup import (
     get_recent_user_texts,
     log_ai_usage,
 )
+from . import vocab_governor
 
 logger = logging.getLogger(__name__)
 
@@ -1523,6 +1524,11 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
         result, was_tail_rewritten = dedupe_question_tail(get_anthropic_client(), user_id, result)
         if was_tail_rewritten:
             logger.info(f"Question-tail rewrite applied — user:{user_id} intent:{button_intent}")
+
+        # ── Step 3.7: Vocab frequency governor — cools overused action-words
+        # (grinning, rehearsing, ...) ON TOP of the hard bans: best-effort rewrite
+        # if a watched term is on cooldown, then records usage for future spacing.
+        result = vocab_governor.enforce(get_anthropic_client(), user_id, result)
 
         # ── Step 4: Update Redis session ───────────────────────────────────
         theme = extract_theme(result)
