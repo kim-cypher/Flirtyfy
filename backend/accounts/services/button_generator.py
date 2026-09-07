@@ -100,7 +100,8 @@ _SYSTEM = (
     "• Never use: actually, genuinely, amazing, interesting, awesome, wonderful, "
     "incredible, perfect. Never use em-dashes. Never use 'did something to me', "
     "'does something to me', 'not gonna lie', or 'ngl', and never build a question as "
-    "'what would you do first when/once...'.\n"
+    "'what would you do first when/once...'. Never open with 'God', 'Honestly', 'Ha', "
+    "or 'Bold', and never use 'my heart races' or 'heart pounding'.\n"
     "• Never ask 'What kind of man are you when...' or 'What did it feel like the "
     "first time a woman...'. Never open with 'I keep' + an -ing verb.\n"
     "• Never open sentence 1 with mundane domestic filler — no spilling or sipping "
@@ -1491,6 +1492,11 @@ _CHARACTER_BREAK_PATTERN = re.compile(
     r'|\b988\b'
     r'|\b(?:suicide|self[- ]harm|harming\s+yourself)\b'
     r'|\byour\s+life\s+matters\b'
+    r'|\b(?:harm|hurt)(?:ing)?\s+(?:yourself|myself)\b'
+    r'|\bemergency\s+(?:number|services|room|line|helpline)\b'
+    r'|\b(?:call|text|contact|reach\s+out\s+to)\s+(?:911|999|a\s+(?:crisis|help)\s*line|a\s+hotline|a\s+professional|a\s+counselor|a\s+therapist|emergency\s+services)\b'
+    r'|\bmental\s+health\s+(?:professional|support|services|crisis|resources)\b'
+    r'|\bspeak\s+(?:to|with)\s+a\s+(?:professional|counselor|therapist)\b'
     r'|\bI\s+can(?:\'t|not)\s+(?:write|send|craft)\s+this\s+message\b'
     r'|\bI\s+can(?:\'t|not)\s+meet\s+you\s+in\s+person\s+or\s+suggest\b'
     r'|\bshows\s+a\s+pattern\s+I\s+can(?:\'t|not)\b'
