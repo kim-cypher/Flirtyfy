@@ -1520,6 +1520,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 ('confession_label', bool(_CONFESSION_LABEL.search(t))),
                 ('self_pity', _has_self_pity(t)),
                 ('chest_tell', _has_chest_tell(t)),
+                ('bold', _has_bold(t)),
             ]
             return [name for name, failed in checks if failed]
 
@@ -1595,7 +1596,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 if (_is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1)
                         or _GRIN_AT_DEVICE.search(s1) or _NOT_GONNA_LIE.search(s1)
                         or _CONFESSION_LABEL.search(s1)
-                        or _has_self_pity(s1) or _has_chest_tell(s1)
+                        or _has_self_pity(s1) or _has_chest_tell(s1) or _has_bold(s1)
                         or (button_intent != 'reply_trigger' and _has_temporal_leak(s1))):
                     # Rotate the fallback opener — a FIXED string here shipped
                     # "Something has been on my mind" verbatim across many replies
@@ -2201,6 +2202,14 @@ _CHEST_TELL = re.compile(
 
 def _has_chest_tell(text: str) -> bool:
     return bool(_CHEST_TELL.search(text or ''))
+
+
+# "bold" — banned in the button prompt but leaked ungated ("Bold of me, but...").
+_BOLD = re.compile(r"\bbold(?:\s+enough|\s+of\s+me)?\b", re.IGNORECASE)
+
+
+def _has_bold(text: str) -> bool:
+    return bool(_BOLD.search(text or ''))
 
 
 _QUESTION_STARTERS = frozenset([
