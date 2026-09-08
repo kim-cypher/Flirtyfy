@@ -1472,12 +1472,13 @@ def generate_context_aware_response(
         "pulls him back into the now with you.\n\n"
     )
     _MEETING_PULL_INSTR = (
-        "The two of you have been circling getting together, and the real thing under his last "
-        "message is how much he WANTS to get to you. Do NOT address, negotiate, or reference "
-        "meeting, calling, distance, or logistics in any way, and do NOT invent an unrelated deep "
-        "confession or a random story. Answer that wanting: turn his eagerness into present-tense "
-        "pull and playful confidence, matched to the register you two were already in, keeping him "
-        "right here in the thread with you now. Then one question that pulls him deeper here.\n\n"
+        "His last message is him eagerly agreeing or pushing to get closer to you — that "
+        "eagerness IS the whole message. Do NOT mention or hint at meeting, calling, distance, "
+        "availability, days, or any logistics, and do NOT pivot into a heavy, serious, or "
+        "vulnerable confession about yourself. Instead TEASE him about how eager and sure of "
+        "himself he is: stay light, warm, and a little cocky, and play with the pull between you "
+        "two right now, in these messages. Then one easy, playful question that keeps him chasing "
+        "you here.\n\n"
     )
 
     if meeting_doubt:
