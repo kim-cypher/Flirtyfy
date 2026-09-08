@@ -2023,6 +2023,7 @@ _MEETING_FANTASY_PATTERNS = re.compile(
     r'|\bcome\s+(?:over|through|inside|in)\b|\bcame\s+over\b'
     r'|\byour\s+leg\s+against\s+mine\b|\bleg\s+pressed\s+against\b'
     r'|\bsitting\s+(?:there\s+)?(?:with\s+you|next\s+to\s+you|beside\s+you|across\s+from\s+you)\b'
+    r'|\b(?:right\s+)?in\s+front\s+of\s+(?:you|me)\b'
     r'|\b(?:next\s+to|beside)\s+me\s+right\s+now\b'
     r'|\bin\s+the\s+same\s+room\b'
     r'|\bunder\s+the\s+(?:table|covers|sheets)\s+(?:with\s+you|together)\b'
