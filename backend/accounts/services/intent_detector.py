@@ -13,6 +13,7 @@ import logging
 from typing import Dict, Optional
 from anthropic import Anthropic, APIError, APIConnectionError, RateLimitError
 from django.conf import settings
+from django.core.cache import cache
 from .button_generator import (
     enforce_char_limit,
     ensure_ends_with_question,
@@ -46,6 +47,92 @@ from . import vocab_governor
 _FORCED_QUESTION_WORDS = ['What', 'When', 'How', 'Who', 'Which', 'Is', 'Are', 'Do', 'Would', 'Could']
 
 logger = logging.getLogger(__name__)
+
+# ── Flirt-move repertoire (left panel) ─────────────────────────────────────
+# The "robotic" feel came from ONE repeated shape — [insightful reaction] +
+# [deep question] — every single reply. This gives her a small repertoire and
+# lets CODE pick one move per reply (weighted random, previous move excluded).
+#
+# Why this is safe from the "reactions got overused" problem: last time a new
+# behavior was a PROMPT SUGGESTION the model could lean on every turn, so it did.
+# Here the weights are a HARD CAP enforced in code — no move can appear more than
+# its share no matter how much the model likes it, and back-to-back repeats for a
+# user are blocked. Every move still ends in the required question; the move just
+# shapes the OPENING beat and ties the question to that same thread, so it lands
+# in the right place instead of pivoting to a tacked-on interview question.
+# Always a LEAN — the register she judged and the difficult-moment rules win.
+_FLIRT_MOVES = {
+    'tease': (
+        "Tease him — a warm, playful hard time about something he just said (a small brag, "
+        "a contradiction, a cocky line). Fond, never mean. Let your question keep teasing that "
+        "SAME thing, so it reads as banter, not an interview."
+    ),
+    'fun': (
+        "Keep it light — a quick fun spark, then ONE low-stakes, genuinely fun question (his "
+        "guilty pleasure, the thing he is weirdly good at, a playful this-or-that). Easy and "
+        "fun to answer, not deep or soul-searching."
+    ),
+    'challenge': (
+        "Throw down a small playful challenge or bet, framed so his answer has to prove "
+        "something to you. Your question IS the challenge ('think you could...', 'could you "
+        "handle...'), keeping a spark of tension between you."
+    ),
+    'cocky': (
+        "Lead with confidence — a cocky, self-assured line about yourself or the two of you, a "
+        "little swagger, never eager. Then a light question that makes HIM step up to match you."
+    ),
+    'callback': (
+        "Reach back to a thread he dropped earlier and pick it up like you never forgot it, so "
+        "it feels personal. Your question reopens THAT thread with fresh curiosity."
+    ),
+    'genuine': (
+        "React honestly to the most real thing he said, warm and a little unguarded, then one "
+        "question a touch deeper into it. This is the sincere gear — use it as written, no more."
+    ),
+    'heat': (
+        "Stay right in the heat with him — present-tense wanting, matched to exactly how "
+        "explicit he got, never swerving to a safe topic. Your question pulls him deeper into "
+        "the moment, not out of it."
+    ),
+}
+# Favor LIGHT/PLAYFUL (what's missing); 'genuine' is a minority on purpose — the
+# sincere-deep move currently dominates and is the thing that reads robotic.
+_FLIRT_MOVE_WEIGHTS = {
+    'tease': 26, 'fun': 24, 'challenge': 16, 'cocky': 16, 'callback': 10, 'genuine': 8,
+}
+
+
+def _select_flirt_move(user_id, topic):
+    """Pick one flirt move for this reply → (move_name, instruction_text).
+
+    Weighted random with the user's immediately-previous move excluded. Intimacy
+    stays mostly in 'heat' (she is already strong there; don't push her out of the
+    moment). Best-effort; never raises."""
+    try:
+        if topic == 'intimacy':
+            move = random.choices(['heat', 'tease', 'cocky'], weights=[75, 15, 10], k=1)[0]
+        else:
+            names = list(_FLIRT_MOVE_WEIGHTS.keys())
+            weights = [_FLIRT_MOVE_WEIGHTS[n] for n in names]
+            last = None
+            if user_id is not None:
+                try:
+                    last = cache.get(f'lp:lastmove:{user_id}')
+                except Exception:
+                    last = None
+            if last in names and len(names) > 1:
+                i = names.index(last)
+                names.pop(i)
+                weights.pop(i)
+            move = random.choices(names, weights=weights, k=1)[0]
+        if user_id is not None:
+            try:
+                cache.set(f'lp:lastmove:{user_id}', move, 15 * 60)
+            except Exception:
+                pass
+        return move, _FLIRT_MOVES[move]
+    except Exception:
+        return 'genuine', _FLIRT_MOVES['genuine']
 
 # System prompt: woman writing to a man on a dating app.
 # Rewritten around three findings from production output (Mysamples.md):
@@ -1364,15 +1451,37 @@ def generate_context_aware_response(
     if _has_rejection(conversation):
         instruction += (
             "He is pulling away, dismissing you, or saying he does not want this. Do NOT argue, "
-            "defend yourself, or beg. Let it show that it landed — a little wounded, a little "
-            "proud, honestly disappointed that someone you were starting to hope about might walk "
-            "away. Keep your dignity, never grovel, never declare love. One honest, warm line, "
-            "then a question that gently leaves the door open and makes him feel he would be "
-            "losing something real by going.\n\n"
+            "defend yourself, or beg, and never chase. Read WHICH kind of leaving this is:\n"
+            "- If he is just being flip, testing you, or tossing off a casual 'bye' mid-banter: "
+            "stay light and completely unbothered — a confident, teasing line that calls his "
+            "bluff and dares him to actually walk, secure in the fact that he will not want to. "
+            "Then a playful question that pulls him back in.\n"
+            "- If it reads as genuine hurt or a real goodbye: let it land — a little wounded, a "
+            "little proud, honestly disappointed that someone you were starting to hope about "
+            "might walk. One honest, warm line, then a question that leaves the door open and "
+            "makes him feel he would be losing something real by going.\n"
+            "Either way: keep your dignity, never grovel, never declare love.\n\n"
+        )
+
+    # ── Flirt move — vary the beat so it isn't the same reaction+deep-question
+    # every time. Skipped on the special paths that already dictate the whole
+    # reply (bare meeting-push advance, bot-accusation, rejection recovery), so
+    # we never stack two conflicting vibe directives.
+    move_name = 'none'
+    move_block = ''
+    special_path = (escalation_found and not working) or bot_accused or _has_rejection(conversation)
+    if not special_path:
+        move_name, move_text = _select_flirt_move(user_id, topic)
+        move_block = (
+            "FLIRT MOVE for this one reply (a lean on the VIBE, never a script, never announced): "
+            + move_text +
+            " This shapes the flavor only — the register you judged and the difficult-moment rules "
+            "ALWAYS win: if he is vulnerable, grieving, or hurting, drop the move and meet him "
+            "there. Still end on the required question.\n\n"
         )
 
     user_prompt = (
-        base + context_block + avoid + instruction
+        base + context_block + avoid + instruction + move_block
         + "Judge his register, then write her next reply. The final sentence MUST be a genuine "
           "question that begins with a question word or auxiliary verb (What, When, How, Who, "
           "Which, Why, Is, Are, Do, Would, Could, Have, Will) — not a statement with a question "
@@ -1493,7 +1602,7 @@ def generate_context_aware_response(
 
         logger.info(
             f"Left-panel reply — topic:{topic} tone:{tone} "
-            f"stage:{intent_data.get('stage')} register:{register}"
+            f"stage:{intent_data.get('stage')} register:{register} move:{move_name}"
         )
         return {'response': result}
 
