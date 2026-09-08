@@ -533,8 +533,10 @@ def _heat_deflect(user_id):
     prompt = (
         "Write a short flirty text (2 sentences, under 30 words) a confident woman sends a man in "
         "a heated chat when she wants to keep it playful and hot WITHOUT answering his last line. "
-        "Warm, teasing, self-assured, suggestive but NOT graphic — no explicit body words. End "
-        "with ONE open question that keeps him going. Output only the message."
+        "Warm, teasing, self-assured, suggestive but NOT graphic — no explicit body words. Stay in "
+        "the texting moment: do NOT imagine being in the same place or meeting, and never use 'if I "
+        "were there' or 'when we meet' — the pull is all through the phone, right now. End with ONE "
+        "open question (not a yes/no, not an 'X or Y'). Output only the message."
     )
     try:
         resp = get_anthropic_client().messages.create(
@@ -546,8 +548,8 @@ def _heat_deflect(user_id):
         )
         log_ai_usage(logger, 'HEAT_DEFLECT', model, resp, user_id=user_id)
         out = (resp.content[0].text or '').strip().strip('"')
-        if not out:
-            return None
+        if not out or _has_meeting_fantasy(out) or _has_logistics_leak(out):
+            return None  # leaked proximity/meeting — caller falls back to vulnerability button
         return ensure_ends_with_question(out, max_chars=300)
     except Exception as e:
         logger.warning("heat deflect failed: %s", e)
