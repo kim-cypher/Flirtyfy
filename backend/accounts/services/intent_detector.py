@@ -1305,6 +1305,39 @@ def _is_thin_answer(text: str) -> bool:
     return len(content) < 2
 
 
+def _open_up_question(client, question: str):
+    """Rewrite a binary 'X or Y?' question into ONE open question he answers in
+    his own words. Cheap Haiku; returns None on failure (caller keeps original).
+    Prompt guidance alone didn't stop the either/or tic — Sonnet ignores it — so
+    this enforces it after the fact without a full (pricey) regeneration."""
+    from django.conf import settings
+    model = getattr(settings, 'ANTHROPIC_REWRITE_MODEL', 'claude-haiku-4-5')
+    prompt = (
+        "Rewrite this dating-app question so it asks ONE open thing he answers in his own words. "
+        "Remove the either/or — do NOT offer two options to choose between. Keep the same topic, "
+        "tone, and heat, similar length, still clearly a question ending in '?'. Prefer starting "
+        "with What, How, Why, When, Which, or Who.\n\n"
+        f"Question: \"{question.strip()}\"\n\n"
+        "Output only the rewritten question."
+    )
+    try:
+        resp = client.messages.create(
+            model=model,
+            system="You are a precise rewriting assistant. Output only the rewritten question.",
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.9,
+            max_tokens=40,
+        )
+        log_ai_usage(logger, 'OPEN_QUESTION', model, resp)
+        out = (resp.content[0].text or '').strip().strip('"')
+        if not out:
+            return None
+        return out if out.endswith('?') else out.rstrip('.,!;: ') + '?'
+    except Exception as e:
+        logger.warning("open-question rewrite failed: %s", e)
+        return None
+
+
 def generate_context_aware_response(
     conversation: str,
     intent_data: Optional[Dict[str, str]] = None,
@@ -1667,6 +1700,20 @@ def generate_context_aware_response(
             # Word + cross-user phrase governor (the only layer that spaces stock
             # wording ACROSS accounts, not just within this user's own history).
             result = vocab_governor.enforce(get_anthropic_client(), user_id, result)
+
+        # Either/or → open question. The model overuses "X or Y?" binaries and
+        # the prompt guidance didn't hold, so rewrite the final question into one
+        # open ask (cheap Haiku, only when the question actually contains "or").
+        try:
+            _sents = re.split(r'(?<=[.!?])\s+', result.strip())
+            if _sents and _sents[-1].rstrip().endswith('?') and re.search(r'\bor\b', _sents[-1], re.I):
+                _newq = _open_up_question(get_anthropic_client(), _sents[-1])
+                if _newq and not re.search(r'\bor\b', _newq, re.I):
+                    _sents[-1] = _newq
+                    result = ' '.join(_sents)
+                    logger.info(f"Left-panel either/or question opened up — user:{user_id}")
+        except Exception as e:
+            logger.warning(f"either/or open-up failed: {e}")
 
         logger.info(
             f"Left-panel reply — topic:{topic} tone:{tone} "
