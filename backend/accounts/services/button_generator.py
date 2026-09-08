@@ -1179,18 +1179,27 @@ def _select_premise(button_intent: str, session_data: dict):
 # voice, no explicit content judgment), so it essentially never refuses.
 # ---------------------------------------------------------------------------
 
-def _premise_opener(client, premise):
-    """A fresh sentence-1 grounded in the rotated premise, for the new_match rescue
-    path — keeps rescues varied instead of falling to a static opener that repeats
-    across users. No grin, no phone/matching. Returns None on failure (caller falls
-    back to the static list). Cheap (Haiku, ~40 tokens)."""
+def _premise_opener(client, premise, kind='new_match'):
+    """A fresh sentence-1 grounded in the rotated premise, for the rescue path —
+    keeps rescues varied instead of falling to a static opener that repeats across
+    users. Returns None on failure (caller falls back to the static list). Cheap
+    (Haiku, ~40 tokens)."""
     model = settings.ANTHROPIC_REWRITE_MODEL
-    prompt = (
-        "Write ONE short opening line (8 to 16 words) a confident woman texts a man she just "
-        "matched with, sprung from this exact real-life situation of hers, in fresh words: "
-        f"{premise}. It is a statement, NOT a question. Do not mention the app, matching, her "
-        "phone or screen, or grinning/smiling at it. Output only the sentence."
-    )
+    if kind == 'vulnerability':
+        prompt = (
+            "Write ONE short opening line (8 to 16 words) in which a woman admits this guarded, "
+            f"vulnerable truth about herself plainly, in fresh words: {premise}. Warm and a "
+            "little exposed but quietly confident — never anxious, self-pitying, morbid, or about "
+            "death or grief. It is a statement, NOT a question. Do not label it a 'confession' or "
+            "call it 'bold'. Output only the sentence."
+        )
+    else:
+        prompt = (
+            "Write ONE short opening line (8 to 16 words) a confident woman texts a man she just "
+            "matched with, sprung from this exact real-life situation of hers, in fresh words: "
+            f"{premise}. It is a statement, NOT a question. Do not mention the app, matching, her "
+            "phone or screen, or grinning/smiling at it. Output only the sentence."
+        )
     try:
         resp = client.messages.create(
             model=model,
@@ -1201,7 +1210,8 @@ def _premise_opener(client, premise):
         )
         log_ai_usage(logger, 'PREMISE_OPENER', model, resp)
         out = (resp.content[0].text or '').strip().strip('"').rstrip('.!?, ')
-        if out and not (_GRIN_AT_DEVICE.search(out) or _CONFESSION_LABEL.search(out)):
+        if out and not (_GRIN_AT_DEVICE.search(out) or _CONFESSION_LABEL.search(out)
+                        or _has_self_pity(out) or _has_bold(out) or _has_chest_tell(out)):
             return out
         return None
     except Exception as e:
@@ -1209,7 +1219,8 @@ def _premise_opener(client, premise):
         return None
 
 
-def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> str | None:
+def _rescue_question(category: dict, question_word: str, avoid_texts: list,
+                     button_intent: str = 'new_match') -> str | None:
     avoid_snippet = ''
     if avoid_texts:
         sample = avoid_texts[-5:]
@@ -1217,11 +1228,25 @@ def _rescue_question(category: dict, question_word: str, avoid_texts: list) -> s
             "\n\nDo not resemble these recently used messages in wording or structure:\n"
             + '\n'.join(f'- {t}' for t in sample)
         )
+    if button_intent == 'vulnerability':
+        # Rescue must keep the reciprocal-vulnerability direction, not fall back
+        # to the generic (often charged) category.
+        body = (
+            f"Write ONE warm, inviting question a woman texts a man right after she admitted "
+            f"something guarded about herself, asking HIM to share the thing he keeps protected "
+            f"and trust her the same way.\n"
+            f"10-16 words. Must start with the word \"{question_word}\".\n"
+            f"Never a dare, a challenge, a 'make a move' push, or anything about her body."
+        )
+    else:
+        body = (
+            f"Write ONE original, confident, flirty question a woman would text a man she "
+            f"deliberately picked on a dating app.\n"
+            f"10-16 words. Must start with the word \"{question_word}\".\n"
+            f"Category: {category['label']} — {category['instruction']}"
+        )
     prompt = (
-        f"Write ONE original, confident, flirty question a woman would text a man she "
-        f"deliberately picked on a dating app.\n"
-        f"10-16 words. Must start with the word \"{question_word}\".\n"
-        f"Category: {category['label']} — {category['instruction']}\n"
+        body + "\n"
         f"Never use these words: actually, genuinely, honestly, amazing, interesting. "
         f"Never build it as 'what would you do first when/once'."
         f"{avoid_snippet}\n\n"
@@ -1428,14 +1453,28 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
         f'Both sentences carry this tone in word choice, pacing, and temperature.'
     )
 
-    user_prompt += (
-        f'\n\nSentence 2 question category: {category["label"].upper()}\n'
-        f'{category["instruction"]}\n'
-        f'Write your own completely original question in this category — '
-        f'the question must grow from what sentence 1 just said, not be generic. '
-        f'He must answer from a real memory, decision, physical feeling, or honest truth. Never yes or no.\n'
-        f'REQUIRED: The question MUST begin with the word "{question_word}" — no other starter is acceptable.'
-    )
+    if button_intent == 'vulnerability':
+        # The generic category rotation kept handing vulnerability charged/dare
+        # questions ("stop playing it safe and make a real move?"), which breaks
+        # the whole point of the button. Here the question always INVITES him to
+        # meet her there — reciprocal, warm, never a challenge.
+        user_prompt += (
+            f'\n\nSentence 2 — her question invites HIM to meet her there: ask about the thing '
+            f'HE keeps guarded and protects (not the thing he performs), so he trusts her with '
+            f'something real the way she just did. Warm and inviting, never a dare, a challenge, '
+            f'a "make a move" push, or anything about her body. It must grow from what she just '
+            f'admitted. Never yes or no.\n'
+            f'REQUIRED: The question MUST begin with the word "{question_word}" — no other starter is acceptable.'
+        )
+    else:
+        user_prompt += (
+            f'\n\nSentence 2 question category: {category["label"].upper()}\n'
+            f'{category["instruction"]}\n'
+            f'Write your own completely original question in this category — '
+            f'the question must grow from what sentence 1 just said, not be generic. '
+            f'He must answer from a real memory, decision, physical feeling, or honest truth. Never yes or no.\n'
+            f'REQUIRED: The question MUST begin with the word "{question_word}" — no other starter is acceptable.'
+        )
 
     is_night = temporal['slot'] in ('night', 'late_night')
     btn_max_tokens = 90 if is_night else 110
@@ -1603,12 +1642,16 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                     # (a repetition / ban risk), because deflections route through
                     # this rescue path often. Prefer a fresh premise-grounded opener
                     # (new_match) so rescues stop shipping bland/repeating lines.
-                    fresh = _premise_opener(get_anthropic_client(), premise) if button_intent == 'new_match' else None
+                    fresh = (
+                        _premise_opener(get_anthropic_client(), premise, kind=button_intent)
+                        if button_intent in ('new_match', 'vulnerability') else None
+                    )
                     s1 = fresh or random.choice(_RESCUE_OPENERS)
 
                 rescue_q = _rescue_question(
                     category, question_word,
                     avoid_texts=get_recent_user_texts(user_id)[:5],
+                    button_intent=button_intent,
                 )
                 if rescue_q:
                     result = s1 + '. ' + rescue_q
