@@ -1279,6 +1279,27 @@ _MEETING_DOUBT = re.compile(
     re.IGNORECASE,
 )
 
+# Filler for the thin-answer check: stopwords + affirmations + availability/time
+# words. "Yes, except weekends" strips to zero content words → a thin answer that
+# gives the model nothing real to grab (so it invents a disconnected confession).
+_THIN_FILLER = {
+    'a', 'an', 'the', 'and', 'or', 'but', 'so', 'to', 'of', 'in', 'on', 'at', 'for',
+    'with', 'is', 'am', 'are', 'be', 'been', 'this', 'that', 'it', 'i', 'im', 'not',
+    'just', 'my', 'me', 'you', 'your', 'well', 'oh', 'um',
+    'yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'fine', 'alright', 'absolutely',
+    'definitely', 'maybe', 'might', 'could', 'would', 'can', 'except', 'only',
+    'weekend', 'weekends', 'weekday', 'weekdays', 'day', 'days', 'today', 'tomorrow',
+    'tonight', 'time', 'anytime', 'available', 'free', 'soon', 'later', 'lifetime', 'life',
+}
+
+
+def _is_thin_answer(text: str) -> bool:
+    """True if `text` carries fewer than 2 real (non-filler) content words — a
+    contentless follow-up like 'yes, except weekends' or 'ok maybe'."""
+    words = re.findall(r"[a-z']+", (text or '').lower())
+    content = [w for w in words if w not in _THIN_FILLER]
+    return len(content) < 2
+
 
 def generate_context_aware_response(
     conversation: str,
@@ -1343,6 +1364,12 @@ def generate_context_aware_response(
     # ── Step 2: escalation filter — meeting push + contact/platform requests ──
     escalation_found, clean_substance = extract_meeting_free_substance(last_msg_clean)
     working = clean_substance if escalation_found else last_msg_clean
+
+    # Was the recent conversation meeting/contact-driven? (Checked BEFORE the
+    # scrub wipes it.) Used below so a thin or doubtful follow-up in a
+    # meeting-heavy chat ("yes, except weekends", "not in this lifetime") gets a
+    # reply that answers his real feeling, not a disconnected deep confession.
+    conv_had_meeting = _is_physical_escalation(conversation)
 
     # Scrub escalation sentences from the full conversation body so the AI
     # never reads them, regardless of where they appear in the conversation.
@@ -1425,33 +1452,38 @@ def generate_context_aware_response(
         "(Texture only — never name any day or time.)\n\n"
     )
 
-    if escalation_found and not working:
-        # His whole message was meeting/logistics, so it scrubs to nothing.
-        # Do NOT fall back to a canned deep opener disconnected from the chat
-        # (that shipped "I've spent years dimming my light" onto "yes, except
-        # weekends"). Answer the FEELING under his push — eager, or frustrated/
-        # doubtful — turned into present pull, never touching logistics.
-        if _MEETING_DOUBT.search(last_msg_clean or ''):
-            instruction = (
-                "His message was essentially all about meeting or logistics, and the tone under "
-                "it is frustration or doubt that this can actually go anywhere. Do NOT address, "
-                "negotiate, decline, or reference meeting, calling, distance, or logistics in any "
-                "way. Answer the FEELING underneath instead: meet his doubt warm, secure, and a "
-                "little amused, never defensive or pleading, and show him what is already good "
-                "right here between you two in these messages. Do NOT invent an unrelated deep "
-                "confession or a random story. Then one question that pulls him back into the "
-                "now with you.\n\n"
-            )
-        else:
-            instruction = (
-                "His message was essentially all about meeting or logistics — but the real thing "
-                "underneath is how much he WANTS to get to you. Do NOT address, negotiate, or "
-                "reference meeting, calling, distance, or logistics in any way, and do NOT invent "
-                "an unrelated deep confession or a random story. Instead answer that wanting: turn "
-                "his eagerness into present-tense pull and playful confidence, matched to the "
-                "register you two were already in, that keeps him right here in the thread with "
-                "you now. Then one question that pulls him deeper here.\n\n"
-            )
+    # A meeting-heavy chat whose latest message is thin ("yes, except weekends")
+    # or doubtful ("not in this lifetime") scrubs to nothing real, so the model
+    # used to invent a disconnected deep confession ("I've spent years dimming my
+    # light"). Detect those and answer his actual FEELING instead, never touching
+    # logistics. Note escalation_found can be False here — a bare follow-up has no
+    # meeting VERB — so these are gated on conv_had_meeting, not escalation_found.
+    _doubt = bool(_MEETING_DOUBT.search(last_msg_clean or ''))
+    meeting_doubt = conv_had_meeting and _doubt
+    meeting_thin = (escalation_found and not working) or (conv_had_meeting and _is_thin_answer(working))
+
+    _MEETING_DOUBT_INSTR = (
+        "The two of you have been circling getting together, and the tone under his last message "
+        "is frustration or doubt that this can actually go anywhere. Do NOT address, negotiate, "
+        "decline, or reference meeting, calling, distance, or logistics in any way. Answer the "
+        "FEELING underneath: meet his doubt warm, secure, and a little amused, never defensive or "
+        "pleading, and show him what is already good right here between you two in these messages. "
+        "Do NOT invent an unrelated deep confession or a random story. Then one question that "
+        "pulls him back into the now with you.\n\n"
+    )
+    _MEETING_PULL_INSTR = (
+        "The two of you have been circling getting together, and the real thing under his last "
+        "message is how much he WANTS to get to you. Do NOT address, negotiate, or reference "
+        "meeting, calling, distance, or logistics in any way, and do NOT invent an unrelated deep "
+        "confession or a random story. Answer that wanting: turn his eagerness into present-tense "
+        "pull and playful confidence, matched to the register you two were already in, keeping him "
+        "right here in the thread with you now. Then one question that pulls him deeper here.\n\n"
+    )
+
+    if meeting_doubt:
+        instruction = _MEETING_DOUBT_INSTR
+    elif meeting_thin:
+        instruction = _MEETING_PULL_INSTR
     elif escalation_found and multi_q_found:
         instruction = (
             f"Part of his message asked to meet, move platforms, or share contact info — that part does not exist. "
@@ -1500,7 +1532,7 @@ def generate_context_aware_response(
     # we never stack two conflicting vibe directives.
     move_name = 'none'
     move_block = ''
-    special_path = (escalation_found and not working) or bot_accused or _has_rejection(conversation)
+    special_path = meeting_doubt or meeting_thin or bot_accused or _has_rejection(conversation)
     if not special_path:
         move_name, move_text = _select_flirt_move(user_id, topic)
         move_block = (
