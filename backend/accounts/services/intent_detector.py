@@ -35,6 +35,7 @@ from .button_generator import (
     _has_overused_frame,
     _opener_signature,
     _CHARACTER_BREAK_PATTERN,
+    _GRIN_AT_DEVICE,
     generate_button_response,
     )
 from .dedup import (
@@ -903,6 +904,8 @@ def _reply_violations(text: str) -> list:
         v.append('voices self-pity / low self-worth (heaviness, not worth the effort, want to be needed) — she is warm, secure, wanted; match HIS weight, never add your own')
     if _has_bold_or_confession(text):
         v.append("uses 'bold' or labels a line a 'confession' — say the thing without the label")
+    if _GRIN_AT_DEVICE.search(text):
+        v.append("grinning/smiling at her phone/screen/his name, or 'like an idiot/fool' — banned")
     if _has_overused_frame(text):
         v.append('uses an overused frame (scrolling, picked first, sound out of me, or a fidget opener) — reach for something fresh')
     if _has_contact_leak(text):
@@ -1357,6 +1360,25 @@ def generate_context_aware_response(
     # Strip masked contact / app-injected junk (asterisks, @handles, emails,
     # random codes, links) up front so the model only ever sees plain words.
     conversation = _sanitize_conversation(conversation)
+
+    # ── Regenerate signal: same user asking again on the SAME conversation within
+    # a short window means they were dissatisfied with the previous reply. Log it
+    # (grep "LEFT_PANEL_REGENERATE") so we can review which conversations get
+    # re-rolled. Best-effort; never blocks a reply.
+    if user_id is not None:
+        try:
+            import hashlib
+            _fp = hashlib.sha256(re.sub(r'\s+', ' ', conversation.lower()).strip().encode()).hexdigest()[:16]
+            _key = f'lp:regen:{user_id}:{_fp}'
+            _prior = cache.get(_key) or 0
+            cache.set(_key, _prior + 1, 15 * 60)
+            if _prior:
+                logger.info(
+                    "LEFT_PANEL_REGENERATE — user:%s fingerprint:%s attempt:%s "
+                    "(assume dissatisfied with prior reply)", user_id, _fp, _prior + 1,
+                )
+        except Exception:
+            pass
 
     # ── Pre-check: his last message is in another language → English-only nudge ──
     if _is_probably_foreign(_find_last_message_block(conversation)):
