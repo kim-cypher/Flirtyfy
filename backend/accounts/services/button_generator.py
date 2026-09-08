@@ -1212,6 +1212,7 @@ def _premise_opener(client, premise, kind='new_match'):
         out = (resp.content[0].text or '').strip().strip('"').rstrip('.!?, ')
         bad = (_GRIN_AT_DEVICE.search(out) or _CONFESSION_LABEL.search(out)
                or _has_self_pity(out) or _has_bold(out) or _has_chest_tell(out)
+               or _has_temporal_leak(out) or _has_time_mention(out)
                or (kind == 'vulnerability' and _has_death_grief(out)))
         if out and not bad:
             return out
