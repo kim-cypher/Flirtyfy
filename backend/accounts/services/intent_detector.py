@@ -548,8 +548,9 @@ def _heat_deflect(user_id):
         )
         log_ai_usage(logger, 'HEAT_DEFLECT', model, resp, user_id=user_id)
         out = (resp.content[0].text or '').strip().strip('"')
-        if not out or _has_meeting_fantasy(out) or _has_logistics_leak(out):
-            return None  # leaked proximity/meeting — caller falls back to vulnerability button
+        if (not out or _has_meeting_fantasy(out) or _has_logistics_leak(out)
+                or _has_time_mention(out) or _has_temporal_leak(out)):
+            return None  # leaked proximity/meeting/time — caller falls back to vulnerability button
         return ensure_ends_with_question(out, max_chars=300)
     except Exception as e:
         logger.warning("heat deflect failed: %s", e)
