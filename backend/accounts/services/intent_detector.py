@@ -1267,6 +1267,19 @@ def _is_complete(text: str) -> bool:
 # Response generation — one LLM call, gpt-4o-mini, tight token limit
 # ---------------------------------------------------------------------------
 
+# When his message is ALL meeting/logistics and scrubs down to nothing, the tone
+# underneath is either eager ("yes, when?") or frustrated/doubtful ("put up or
+# shut up", "not in this lifetime"). This tells them apart so the reply answers
+# the real feeling instead of a disconnected canned opener.
+_MEETING_DOUBT = re.compile(
+    r"\b(?:excuses?|put up or shut up|shut up|wasting|waste of|dog and pony|all talk|"
+    r"run[\s-]?around|never (?:gonna|going to|happen|works?)|not (?:gonna|going to) happen|"
+    r"in this life ?time|don'?t believe|do you (?:even )?(?:mean|plan)|"
+    r"you'?re all|tired of|sick of|prove it)\b",
+    re.IGNORECASE,
+)
+
+
 def generate_context_aware_response(
     conversation: str,
     intent_data: Optional[Dict[str, str]] = None,
@@ -1413,14 +1426,32 @@ def generate_context_aware_response(
     )
 
     if escalation_found and not working:
-        instruction = (
-            "His message was ONLY a push to meet, move platforms, or share a number/location — "
-            "nothing else to answer. Act as if that part was never written; do NOT address or "
-            "decline it. Instead, look at the LAST thing SHE said (the most recent YOU: line above) "
-            "and ADVANCE that thread — take the topic you two were already on somewhere new with a "
-            "fresh thought or a little imagination, keeping the SAME mood and register you were both "
-            "in. Then one question that pulls him deeper here.\n\n"
-        )
+        # His whole message was meeting/logistics, so it scrubs to nothing.
+        # Do NOT fall back to a canned deep opener disconnected from the chat
+        # (that shipped "I've spent years dimming my light" onto "yes, except
+        # weekends"). Answer the FEELING under his push — eager, or frustrated/
+        # doubtful — turned into present pull, never touching logistics.
+        if _MEETING_DOUBT.search(last_msg_clean or ''):
+            instruction = (
+                "His message was essentially all about meeting or logistics, and the tone under "
+                "it is frustration or doubt that this can actually go anywhere. Do NOT address, "
+                "negotiate, decline, or reference meeting, calling, distance, or logistics in any "
+                "way. Answer the FEELING underneath instead: meet his doubt warm, secure, and a "
+                "little amused, never defensive or pleading, and show him what is already good "
+                "right here between you two in these messages. Do NOT invent an unrelated deep "
+                "confession or a random story. Then one question that pulls him back into the "
+                "now with you.\n\n"
+            )
+        else:
+            instruction = (
+                "His message was essentially all about meeting or logistics — but the real thing "
+                "underneath is how much he WANTS to get to you. Do NOT address, negotiate, or "
+                "reference meeting, calling, distance, or logistics in any way, and do NOT invent "
+                "an unrelated deep confession or a random story. Instead answer that wanting: turn "
+                "his eagerness into present-tense pull and playful confidence, matched to the "
+                "register you two were already in, that keeps him right here in the thread with "
+                "you now. Then one question that pulls him deeper here.\n\n"
+            )
     elif escalation_found and multi_q_found:
         instruction = (
             f"Part of his message asked to meet, move platforms, or share contact info — that part does not exist. "
