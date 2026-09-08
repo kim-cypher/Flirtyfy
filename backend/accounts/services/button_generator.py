@@ -2195,6 +2195,12 @@ def _has_logistics_leak(text: str) -> bool:
 
 _FORMULA_PATTERNS = re.compile(
     r'\bwhat\s+kind\s+of\s+(?:man|woman|person)\s+(are|were|would)\s+you\b'
+    # "are you the type/kind (to/who)", "the type/kind who", "are you someone who"
+    # — the model's dodge around the "what kind of man" ban; asks a personality
+    # quiz instead of a direct question.
+    r'|\bare\s+you\s+(?:the|a)\s+(?:type|kind)\b'
+    r'|\bthe\s+(?:type|kind)\s+(?:to|who|that)\b'
+    r'|\bare\s+you\s+someone\s+who\b'
     r'|\bwhat\s+(?:did\s+it\s+feel\s+like|was\s+it\s+like)\s+the\s+first\s+time\s+a\s+woman\b'
     r'|\bi\s+keep\s+\w+ing\b'
     r'|\bi\s+(?:have|\'ve)\s+been\s+replaying\b'
