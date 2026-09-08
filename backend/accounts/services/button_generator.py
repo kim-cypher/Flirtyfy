@@ -605,7 +605,7 @@ _MOODS_BY_SLOT = {
 # output ("the exact moment my week finally let go of me" — Mysamples.md
 # sample 24). Fragments give direction without giving quotable language.
 _DAY_OVERLAYS = {
-    'Monday':    'start-of-week heaviness',
+    'Monday':    'start-of-week reset',
     'Tuesday':   'quiet midweek focus',
     'Wednesday': 'midweek restlessness',
     'Thursday':  'rising anticipation',
@@ -738,6 +738,64 @@ _ROW_REGISTER = {
     5: 'Bold and intimate. Desire spoken openly; graphic language only if this button is explicitly sexual.',
     6: 'Sexually explicit content is allowed and welcome on this button.',
 }
+
+
+# ---------------------------------------------------------------------------
+# Per-intent VIBE variants — the missing "heat variety". A button's row register
+# was fixed, so new_match was always intensity-8 ("charged" every time) and
+# vulnerability always drifted the same heavy/dark way. These give a FEW heat
+# variants and let code pick one per call (weighted, previous excluded), so the
+# range varies without any single vibe running away — same hard-cap safeguard as
+# the left-panel flirt moves. Intents NOT listed here keep their row register
+# unchanged (reply_trigger, and every other button), so nothing else moves.
+# ---------------------------------------------------------------------------
+_INTENT_VIBES = {
+    'new_match': [
+        (34, _ROW_REGISTER[1]),  # the current charged pull
+        (33, 'Playful and light — teasing, fun, a confident spark with a grin rather than high '
+             'heat. Suggestive at most, never graphic, no explicit words on a cold open.'),
+        (33, 'Warm, self-assured and disarming — clear interest carried lightly, inviting rather '
+             'than intense. Never graphic, no explicit words on a cold open.'),
+    ],
+    'vulnerability': [
+        (55, 'Warm and emotionally intimate — one real, specific soft admission offered with quiet '
+             'confidence. Honest and a little exposed, but never anxious, morbid, self-pitying, or '
+             'dark, and never about death or grief. No sexual content.'),
+        (45, 'Warm but light — an endearing, slightly embarrassing admission she can smile at '
+             'herself for, confident and disarming. Honest, never anxious, heavy, or dark. No '
+             'sexual content.'),
+    ],
+}
+
+
+def _select_vibe(user_id, button_intent, default_register):
+    """Pick this call's register line. For intents with vibe variants, weighted
+    random with the user's previous vibe excluded; otherwise the row default
+    (unchanged behavior). Best-effort; never raises."""
+    variants = _INTENT_VIBES.get(button_intent)
+    if not variants:
+        return default_register
+    try:
+        pool = list(variants)
+        key = f'btn:lastvibe:{button_intent}:{user_id}' if user_id is not None else None
+        last = None
+        if key:
+            try:
+                last = cache.get(key)
+            except Exception:
+                last = None
+        if last is not None and len(pool) > 1:
+            pool = [v for v in pool if v[1] != last] or pool
+        weights = [w for w, _ in pool]
+        line = random.choices([v for _, v in pool], weights=weights, k=1)[0]
+        if key:
+            try:
+                cache.set(key, line, 15 * 60)
+            except Exception:
+                pass
+        return line
+    except Exception:
+        return default_register
 
 
 # ---------------------------------------------------------------------------
@@ -1359,7 +1417,10 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
         f"{temporal['mood']}, {temporal['day_overlay']}."
     )
 
-    register_line = _ROW_REGISTER.get(intent_config.get('row'), _ROW_REGISTER[1])
+    register_line = _select_vibe(
+        user_id, button_intent,
+        _ROW_REGISTER.get(intent_config.get('row'), _ROW_REGISTER[1]),
+    )
     user_prompt += f"\n\nRegister for this button: {register_line}"
 
     user_prompt += (
@@ -1457,6 +1518,8 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 ('grin_at_device', bool(_GRIN_AT_DEVICE.search(t))),
                 ('not_gonna_lie', bool(_NOT_GONNA_LIE.search(t))),
                 ('confession_label', bool(_CONFESSION_LABEL.search(t))),
+                ('self_pity', _has_self_pity(t)),
+                ('chest_tell', _has_chest_tell(t)),
             ]
             return [name for name, failed in checks if failed]
 
@@ -1532,6 +1595,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 if (_is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1)
                         or _GRIN_AT_DEVICE.search(s1) or _NOT_GONNA_LIE.search(s1)
                         or _CONFESSION_LABEL.search(s1)
+                        or _has_self_pity(s1) or _has_chest_tell(s1)
                         or (button_intent != 'reply_trigger' and _has_temporal_leak(s1))):
                     # Rotate the fallback opener — a FIXED string here shipped
                     # "Something has been on my mind" verbatim across many replies
@@ -1759,8 +1823,8 @@ def validate_character_voice(text: str) -> str:
     for phrase in ai_phrases:
         text = text.replace(phrase, '').replace(phrase.lower(), '')
 
-    # Em-dashes → period + space
-    text = re.sub(r'[.!?]?\s*—\s*', '. ', text)
+    # Em / en / horizontal-bar dashes → period + space (all variants, not just —)
+    text = re.sub(r'[.!?]?\s*[—–―]\s*', '. ', text)
     text = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), text)
 
     # Strip 'actually' — single most common AI verbal tic; system prompt isn't enough alone
@@ -2045,6 +2109,8 @@ _LOGISTICS_LEAK_PATTERNS = re.compile(
     r'|\bI\s+live\s+(?:in|near)\b'
     r'|\bin\s+your\s+city\b'
     r'|\b(?:meet|meeting)\s+(?:you|up|somewhere|anywhere|in\s+person)\b'
+    r'|\b(?:meet|meeting|met)\s+(?:you\s+|up\s+)?for\s+(?:coffee|drinks?|dinner|lunch|breakfast|a\s+(?:drink|bite|meal|date))\b'
+    r'|\b(?:if|when)\s+we\s+(?:ever\s+)?(?:met|meet)\b'
     r'|\bcome\s+over\b|\bcame\s+over\b|\bcome\s+to\s+(?:your|my)\b'
     r'|\b(?:showed?|show)\s+up\s+at\s+your\s+(?:door|place|house)\b'
     r'|\bsnuck\s+over\b|\bwalked?\s+through\s+your\s+door\b'
@@ -2093,6 +2159,48 @@ _FORMULA_PATTERNS = re.compile(
 
 def _has_formula_phrase(text: str) -> bool:
     return bool(_FORMULA_PATTERNS.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Self-injected heaviness / low self-worth. Same rule as the left panel: she
+# must never volunteer her OWN sadness or low value ("heavy start of my week",
+# "not worth the effort", "want to be needed"). Catches the self-pity
+# constructions plus the button-specific "heavy start/day/week" leak (the Monday
+# overlay used to inject "heaviness"). Button-tuned sibling of
+# intent_detector._SELF_PITY, which stays narrower to protect genuine depth on
+# the left panel — kept separate by design.
+# ---------------------------------------------------------------------------
+_SELF_PITY = re.compile(
+    r"\bheaviness\b"
+    r"|\bheavy[\s-]+(?:start|day|week|mood)s?\b"
+    r"|\bfeels?\s+(?:so\s+|really\s+)?heavy\b"
+    r"|\bdragg(?:ing|ed)\s+(?:it|this|that|myself|around|it all)\b"
+    r"|\b(?:not|isn'?t|aren'?t|never)\s+worth\s+(?:the\s+)?(?:effort|it|me|trouble|staying)\b"
+    r"|\bbrace\s+(?:myself\s+)?for\s+(?:people|you|anyone|him|them)\s+to\s+(?:realize|see|figure|find)"
+    r"|\bpeople\s+to\s+realize\s+I'?m\s+not\b"
+    r"|\bkept\s+(?:people|everyone|them|others|him|guys|men)\s+(?:out|away|at\s+arm)"
+    r"|\b(?:want|wanted|wanting|need|needed|needing)\s+to\s+be\s+needed\b",
+    re.IGNORECASE,
+)
+
+
+def _has_self_pity(text: str) -> bool:
+    return bool(_SELF_PITY.search(text or ''))
+
+
+# Chest as a physical tell — the model's default body-narration location, still
+# leaking despite the prompt ban and the body-part rotation. Narrow: only the
+# possessive/tell forms ("my chest", "in your chest", "chest tightens"), so it
+# forces rotation to another body part without over-rejecting.
+_CHEST_TELL = re.compile(
+    r"\b(?:my|your|his|her|the)\s+chest\b"
+    r"|\bchest\s+(?:tighten|flutter|loosen|lit|warm|ache|swell|clench|pang|goes|does)",
+    re.IGNORECASE,
+)
+
+
+def _has_chest_tell(text: str) -> bool:
+    return bool(_CHEST_TELL.search(text or ''))
 
 
 _QUESTION_STARTERS = frozenset([
