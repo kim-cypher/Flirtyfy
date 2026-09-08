@@ -1708,7 +1708,11 @@ def generate_context_aware_response(
             _sents = re.split(r'(?<=[.!?])\s+', result.strip())
             if _sents and _sents[-1].rstrip().endswith('?') and re.search(r'\bor\b', _sents[-1], re.I):
                 _newq = _open_up_question(get_anthropic_client(), _sents[-1])
-                if _newq and not re.search(r'\bor\b', _newq, re.I):
+                # Accept only if it dropped the "or" AND didn't introduce a
+                # meeting/logistics leak (the rewrite is ungated otherwise).
+                if (_newq and not re.search(r'\bor\b', _newq, re.I)
+                        and not _has_meeting_fantasy(_newq) and not _has_logistics_leak(_newq)
+                        and not _has_time_mention(_newq) and not _has_temporal_leak(_newq)):
                     _sents[-1] = _newq
                     result = ' '.join(_sents)
                     logger.info(f"Left-panel either/or question opened up — user:{user_id}")

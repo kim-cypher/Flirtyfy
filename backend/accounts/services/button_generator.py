@@ -2028,6 +2028,7 @@ _MEETING_FANTASY_PATTERNS = re.compile(
     r'|\bin\s+the\s+same\s+room\b'
     r'|\bunder\s+the\s+(?:table|covers|sheets)\s+(?:with\s+you|together)\b'
     r'|\b(?:if|when)\s+you\s+(?:get|come|show\s+up)\s+here\b'
+    r'|\b(?:when|if|once|after|until)\s+(?:we\s+)?(?:finally\s+|ever\s+|actually\s+|do\s+)?meet\b'
     r'|\bin\s+your\s+(?:bed|lap|arms)\s+right\s+now\b',
     re.IGNORECASE,
 )
