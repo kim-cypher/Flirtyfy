@@ -523,17 +523,54 @@ def _has_rejection(text: str) -> bool:
     return bool(_REJECTION_PATTERN.search(text))
 
 
-def _deflect(user_id, time_slot=None):
+def _heat_deflect(user_id):
+    """A confident, warm, still-flirty redirect for an EXPLICIT conversation, so a
+    deflection doesn't drop into vulnerability/therapy mid-heat. Suggestive but
+    NOT graphic (a graphic deflection would just refuse again). Best-effort;
+    returns None on failure."""
+    from django.conf import settings
+    model = getattr(settings, 'ANTHROPIC_REWRITE_MODEL', 'claude-haiku-4-5')
+    prompt = (
+        "Write a short flirty text (2 sentences, under 30 words) a confident woman sends a man in "
+        "a heated chat when she wants to keep it playful and hot WITHOUT answering his last line. "
+        "Warm, teasing, self-assured, suggestive but NOT graphic — no explicit body words. End "
+        "with ONE open question that keeps him going. Output only the message."
+    )
+    try:
+        resp = get_anthropic_client().messages.create(
+            model=model,
+            system="You output only the requested message, nothing else.",
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=1.0,
+            max_tokens=60,
+        )
+        log_ai_usage(logger, 'HEAT_DEFLECT', model, resp, user_id=user_id)
+        out = (resp.content[0].text or '').strip().strip('"')
+        if not out:
+            return None
+        return ensure_ends_with_question(out, max_chars=300)
+    except Exception as e:
+        logger.warning("heat deflect failed: %s", e)
+        return None
+
+
+def _deflect(user_id, time_slot=None, heat=False):
     """
     Replaces the old static 6-line _SEDUCTIVE_DEFLECTIONS pool — that pool
     repeated verbatim across users/conversations, exactly the kind of fixed
     text the dedup work elsewhere is meant to eliminate.
 
-    Routes through the same generation pipeline as the 'vulnerability' button
-    instead: full opener-style/tone/question-category rotation, structural
-    validation, and DB-backed 30-day dedup — never the same fixed line twice.
+    For an EXPLICIT conversation (heat=True) it deflects with a warm, in-the-heat
+    redirect so the reply doesn't lurch into a deep vulnerability question
+    mid-sexual-chat. Otherwise it routes through the 'vulnerability' button:
+    full opener-style/tone/question-category rotation, structural validation,
+    and DB-backed 30-day dedup — never the same fixed line twice.
     """
     if user_id is not None:
+        if heat:
+            hot = _heat_deflect(user_id)
+            if hot:
+                return {'response': hot}
         result = generate_button_response(user_id, 'vulnerability', time_slot=time_slot)
         if 'response' in result:
             return {'response': result['response']}
@@ -1757,7 +1794,7 @@ def generate_context_aware_response(
             )
             if v2:
                 logger.warning("Left-panel: neutralized recovery still failed (%s), deflecting", v2)
-                return _deflect(user_id, time_slot)
+                return _deflect(user_id, time_slot, heat=(topic == 'intimacy'))
             logger.info("Left-panel: neutralized recovery succeeded, user:%s", user_id)
             register, result, violations = r2, res2, []
 
@@ -1776,7 +1813,7 @@ def generate_context_aware_response(
             )
             if retry_violations == ['character_break']:
                 logger.warning("Left-panel: character break on retry, returning deflection")
-                return _deflect(user_id, time_slot)
+                return _deflect(user_id, time_slot, heat=(topic == 'intimacy'))
             if not retry_violations:
                 register, result = retry_register, retry_result
             else:
@@ -1786,7 +1823,7 @@ def generate_context_aware_response(
                 logger.warning(
                     f"Left-panel: reply failed gates twice ({retry_violations}), deflecting"
                 )
-                return _deflect(user_id, time_slot)
+                return _deflect(user_id, time_slot, heat=(topic == 'intimacy'))
 
         # ── Uniqueness — literal n-gram pass, then trigram similarity pass ────
         if user_id is not None:
