@@ -54,6 +54,7 @@ _SEED_WATCH = {
     'smile_fool': r'\bsmil(?:e|es|ing)\b[^.?!]{0,20}\b(?:idiot|fool)\b',
     'beaming': r'\bbeaming\b',
     'rehearsing': r'\brehears(?:e|es|ing|ed)\b',
+    'nightlight': r'\bnight\s?light\b|\bhallway light\b|\bbedside (?:lamp|light)\b',
     'chest': r'\bchest\b',
     'heart_move': r'\bheart\b[^.?!]{0,12}(?:rac|pound|sprint|skip|flutter)',
     'not_gonna_lie': r'\bnot gonna lie\b|\bngl\b',
