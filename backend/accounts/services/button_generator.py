@@ -1694,6 +1694,11 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
         # if a watched term is on cooldown, then records usage for future spacing.
         result = vocab_governor.enforce(get_anthropic_client(), user_id, result)
 
+        # Final cleanup: dedup/governor rewrites above run after the in-flow
+        # validate_character_voice, so re-clean once (strips a dash/'actually' a
+        # rewrite may have reintroduced). Idempotent.
+        result = validate_character_voice(result)
+
         # ── Step 4: Update Redis session ───────────────────────────────────
         theme = extract_theme(result)
         session_data['used_themes'][button_intent] = (used_themes + [theme])[-8:]
@@ -2059,7 +2064,8 @@ _OVERUSED_FRAME_PATTERNS = re.compile(
     r'|\b(?:first|that|the)\s+sound\s+(?:you\'?d?\s+|you\s+)?\w*\s*(?:pull|punch|drag|coax)\w*\s+out\s+of\s+me\b'
     r'|\bsound\s+(?:you\'?d?\s+want\s+)?(?:to\s+)?(?:pull|punch|drag)\w*\s+out\s+of\s+me\b'
     r'|\bnot\s+just\s+(?:a\s+good\s+option|like\s+me|someone\s+to\s+like)\b'
-    r'|\bmy\s+(?:thumb|knee|leg|pulse|tea|coffee)\b[^.?!]{0,45}\b(?:hover|bounc|gone\s+cold|twitch|jitter)',
+    r'|\bmy\s+(?:thumb|knee|leg|pulse|tea|coffee)\b[^.?!]{0,45}\b(?:hover|bounc|gone\s+cold|twitch|jitter)'
+    r'|\bspill(?:ed|ing|t)?\s+(?:my\s+|the\s+|a\s+)?(?:coffee|tea|wine|drink|water)\b',
     re.IGNORECASE,
 )
 
@@ -2204,6 +2210,10 @@ _FORMULA_PATTERNS = re.compile(
     r'|\bare\s+you\s+(?:the|a)\s+(?:type|kind)\b'
     r'|\bthe\s+(?:type|kind)\s+(?:to|who|that)\b'
     r'|\bare\s+you\s+someone\s+who\b'
+    # new_match's calcified "you're chosen" question shape.
+    r'|\bare\s+you\s+the\s+(?:only\s+)?one\b'
+    r'|\bthe\s+only\s+one\s+who\b'
+    r'|\bwhich\s+version\s+of\s+(?:you|yourself)\b'
     r'|\bwhat\s+(?:did\s+it\s+feel\s+like|was\s+it\s+like)\s+the\s+first\s+time\s+a\s+woman\b'
     r'|\bi\s+keep\s+\w+ing\b'
     r'|\bi\s+(?:have|\'ve)\s+been\s+replaying\b'

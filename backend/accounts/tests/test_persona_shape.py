@@ -138,10 +138,22 @@ class LeftPanelGatePortTests(TestCase):
         ))
 
     def test_clean_reply_passes(self):
+        # Must be >= 18 words to clear the length floor.
         self.assertEqual(
-            _reply_violations("School bus, huh. What's the worst thing a kid's pulled back there?"),
+            _reply_violations(
+                "School bus, huh, that takes real patience most people don't have. "
+                "What's the worst thing a kid has ever pulled on you back there?"
+            ),
             [],
         )
+
+    def test_too_short_is_flagged(self):
+        short = "Ha, bold move. What's your deal?"  # 6 words
+        self.assertTrue(any('at least 18 words' in v for v in _reply_violations(short)))
+        # A 20-word reply clears the floor.
+        ok = ("School bus, huh, that takes real patience most people don't have. "
+              "What's the worst thing a kid has pulled back there?")
+        self.assertFalse(any('at least 18 words' in v for v in _reply_violations(ok)))
 
 
 class GovernorBodyTellTests(TestCase):

@@ -241,11 +241,11 @@ WOMAN_PERSONA_SYSTEM = (
 
 
     "HOW SHE WRITES — like a real woman texting, never an essay:\n"
-    "- LENGTH MATCHES HIM, and it VARIES. Most replies land around 16 to 24 words (one or two "
-    "lines) — substantive, never a bare one-word fragment, and never a 35-to-40-word wall. If he "
-    "writes a lot she can stretch to two full sentences; if he is terse she stays on the shorter "
-    "end. Real texting is uneven: change the length every time, never the same silhouette twice "
-    "in a row.\n"
+    "- LENGTH MATCHES HIM, and it VARIES — but ALWAYS AT LEAST 18 WORDS. Most replies land "
+    "around 18 to 26 words (one or two lines): substantive, never a bare fragment, and never a "
+    "35-to-40-word wall. If he writes a lot she can stretch to two full sentences; if he is terse "
+    "she still gives a real 18-to-22-word reply, never a throwaway. Real texting is uneven: "
+    "change the length every time, never the same silhouette twice in a row.\n"
     "- Blunt, casual, and real beats polished and literary EVERY time. She can use a fragment, a "
     "casual aside, light shorthand ('u', 'ya', 'lol', 'nah', 'omg') here and there, and at most "
     "ONE emoji once in a while when it truly fits — never forced. Skip elaborate metaphors and "
@@ -1027,6 +1027,8 @@ def _reply_violations(text: str) -> list:
         return ['empty']
     if _is_refusal(text) or _CHARACTER_BREAK_PATTERN.search(text):
         return ['character_break']  # terminal — never retried, always deflected
+    if len(text.split()) < 18:
+        v.append('too short — the reply must be at least 18 words')
     if _has_banned_opener(text):
         v.append('banned opener (never open with That is / Wow / Oh / I appreciate)')
     if not _is_complete(text):
@@ -1774,13 +1776,13 @@ def generate_context_aware_response(
     # target; the hint drives the model to write short in the first place.
     his_words = len((working or '').split())
     if his_words <= 6:
-        length_hint = ("He sent very few words — keep your reply fairly short but SUBSTANTIVE: "
-                       "about 14 to 20 words, a genuine reaction plus a plain question. Not a "
-                       "bare fragment, not a wall.")
-        reply_cap_chars = 200
+        length_hint = ("He sent very few words, but still give a real reply: AT LEAST 18 words, "
+                       "around 18 to 24 — a genuine reaction plus a plain question. Never a "
+                       "throwaway or a bare fragment.")
+        reply_cap_chars = 220
     elif his_words <= 22:
-        length_hint = "Keep it punchy but real — one or two lines, roughly 16 to 26 words."
-        reply_cap_chars = 240
+        length_hint = "Keep it punchy but real — one or two lines, at least 18 words, roughly 18 to 26."
+        reply_cap_chars = 250
     else:
         length_hint = ("He wrote a fair amount — up to two sentences, roughly 22 to 32 words, "
                        "never a wall of text.")
@@ -1888,9 +1890,10 @@ def generate_context_aware_response(
                 settings.ANTHROPIC_GENERATION_MODEL,
                 '\n\nYour previous attempt was rejected for these reasons: '
                 + '; '.join(violations) + '. '
-                'Fix every one of them. Keep it SHORT and human (match his length), and end in a '
-                'real question — a casual one is perfect ("you into that?", "so what happened '
-                'next?", "where\'d that come from?"), never a stiff formal question.'
+                'Fix every one of them. Keep it human and casual, AT LEAST 18 words (never a '
+                'throwaway), and end in a real question — a casual one is perfect ("you into '
+                'that?", "so what happened next?", "where\'d that come from?"), never a stiff '
+                'formal question.'
             )
             if retry_violations == ['character_break']:
                 logger.warning("Left-panel: character break on retry, returning deflection")
