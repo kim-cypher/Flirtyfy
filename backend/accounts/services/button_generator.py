@@ -1251,7 +1251,9 @@ def _rescue_question(category: dict, question_word: str, avoid_texts: list,
     prompt = (
         body + "\n"
         f"Never use these words: actually, genuinely, honestly, amazing, interesting. "
-        f"Never build it as 'what would you do first when/once'."
+        f"Never build it as 'what would you do first when/once'. Never phrase it as 'are you "
+        f"the type/kind/one', 'which version of you', 'which one are you', and never an either/or "
+        f"(no 'X or Y')."
         f"{avoid_snippet}\n\n"
         "Output only the question itself, nothing else, ending with a question mark."
     )
@@ -1638,6 +1640,7 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                 # that triggered the retry in the first place would still ship,
                 # just with a fresh question bolted onto it.
                 if (_is_refusal(s1) or len(s1.split()) < 4 or _has_formula_phrase(s1)
+                        or _has_overused_frame(s1)
                         or _GRIN_AT_DEVICE.search(s1) or _NOT_GONNA_LIE.search(s1)
                         or _CONFESSION_LABEL.search(s1)
                         or _has_self_pity(s1) or _has_chest_tell(s1) or _has_bold(s1)
@@ -1654,19 +1657,34 @@ def generate_button_response(user_id: int, button_intent: str, time_slot: str = 
                     )
                     s1 = fresh or random.choice(_RESCUE_OPENERS)
 
-                rescue_q = _rescue_question(
-                    category, question_word,
-                    avoid_texts=get_recent_user_texts(user_id)[:5],
-                    button_intent=button_intent,
-                )
+                def _rq():
+                    return _rescue_question(
+                        category, question_word,
+                        avoid_texts=get_recent_user_texts(user_id)[:5],
+                        button_intent=button_intent,
+                    )
+
+                # The rescue question is otherwise UNGATED — the model's favorite
+                # "are you the type/one" / "which version" / either-or formula slips
+                # through here. Regenerate once if it comes back formulaic, then
+                # fall back to a clean casual question.
+                rescue_q = _rq()
+                if rescue_q and (_has_formula_phrase(rescue_q) or _has_overused_frame(rescue_q)):
+                    rescue_q = _rq() or rescue_q
+                if rescue_q and (_has_formula_phrase(rescue_q) or _has_overused_frame(rescue_q)):
+                    rescue_q = None
                 if rescue_q:
                     result = s1 + '. ' + rescue_q
                 else:
-                    # True last resort — only reachable if the API itself is unavailable.
                     logger.warning(
-                        f"Rescue generation exhausted — user:{user_id} intent:{button_intent}"
+                        f"Rescue question fell back to clean generic — user:{user_id} intent:{button_intent}"
                     )
-                    result = s1 + '. ' + 'What is on your mind about this right now?'
+                    result = s1 + '. ' + random.choice([
+                        "So what's the first thing that pops into your head?",
+                        "So what's got your attention today?",
+                        "What's the story there?",
+                        "What are you really after here?",
+                    ])
 
         # ── Step 3.5: Phrase-level uniqueness — DB-backed, 30-day window ───────
         # Single place that checks/fixes literal repetition, regardless of
