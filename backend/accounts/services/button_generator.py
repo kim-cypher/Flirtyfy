@@ -2298,8 +2298,23 @@ _QUESTION_STARTERS = frozenset([
 ])
 
 
+# Casual question leads humans actually use ("you into that?", "so what's your
+# move?", "wait seriously?", "where'd that come from?"). Accepted by the GATE
+# only (which already requires a trailing '?'), NOT by ensure_ends_with_question
+# — that restorer stays strict so it never fake-converts a statement into a
+# question. This is what lets the reply sound human instead of academically
+# formal ("How would you go about demonstrating that my position is incorrect?").
+_CASUAL_QUESTION_STARTERS = frozenset([
+    'you', "you're", "you'd", "you'll", "you've", 'so', 'wait', 'and', 'ever',
+    'got', 'ready', 'gonna', 'wanna', 'still', 'seriously', 'right', 'tell',
+    "where'd", "what'd", "how'd", "who'd", "why'd", "when'd", 'be', 'bet',
+])
+_LOOSE_QUESTION_STARTERS = _QUESTION_STARTERS | _CASUAL_QUESTION_STARTERS
+
+
 def _is_genuine_question(text: str) -> bool:
-    """True only if the last sentence starts with a real question word or auxiliary verb."""
+    """True if the last sentence is a real question — a formal opener OR a casual
+    human lead — and ends in '?'. (Bare noun-phrase-plus-'?' still fails.)"""
     text = text.strip()
     if not text.endswith('?'):
         return False
@@ -2307,7 +2322,7 @@ def _is_genuine_question(text: str) -> bool:
     last = sentences[-1].strip() if sentences else text
     words = last.split()
     first = words[0].lower().rstrip('?.,!') if words else ''
-    return first in _QUESTION_STARTERS
+    return first in _LOOSE_QUESTION_STARTERS
 
 
 def extract_theme(text: str) -> str:

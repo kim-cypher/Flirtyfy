@@ -62,6 +62,12 @@ _SEED_WATCH = {
     'blush': r'\bblush(?:ing|ed|es)?\b',
     'stomach_move': r'\bstomach\b[^.?!]{0,12}(?:flip|drop|knot)',
     'left_on_read': r'\bleft (?:me )?on read\b',
+    # Explicit physical-tell rut + verbal tics (frequency-capped, not banned).
+    'thighs': r'\bthighs?\b',
+    'squeeze': r'\bsqueez\w*\b',
+    'ache_body': r'\bach(?:e|es|ing)\b',
+    'highlight_reel': r'\bhighlight reel\b',
+    'right_now': r'\bright now\b',
 }
 
 _STOP = {

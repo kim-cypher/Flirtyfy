@@ -36,6 +36,7 @@ from .button_generator import (
     _opener_signature,
     _CHARACTER_BREAK_PATTERN,
     _GRIN_AT_DEVICE,
+    _has_chest_tell,
     generate_button_response,
     )
 from .dedup import (
@@ -180,6 +181,34 @@ def _select_flirt_move(user_id, topic):
     except Exception:
         return 'genuine', _FLIRT_MOVES['genuine']
 
+
+# ── Persona archetypes ─────────────────────────────────────────────────────
+# We run 100+ profiles but every reply used one identical literary voice — a
+# man messaged by several of "our women" was talking to the same ghostwriter.
+# Each conversation gets ONE voice, chosen by a stable hash of the conversation
+# so it's consistent for that thread but VARIES across threads. This is the
+# cross-profile fingerprint fix (and a future premium/upsell lever).
+_ARCHETYPES = {
+    'playful': "HER VOICE IS PLAYFUL: light, teasing, quick-witted, a little goofy. Short punchy "
+               "lines, banter over depth, the odd emoji when it fits. Fun first.",
+    'sultry':  "HER VOICE IS SULTRY: slow-burning, direct, LOW word-count, more heat than chatter. "
+               "She says less and means more — confident, unhurried, a little dangerous.",
+    'sweet':   "HER VOICE IS SWEET: warm, genuine, softer edges, encouraging. Still confident and "
+               "no pushover, but her default is kind and inviting rather than cocky.",
+    'blunt':   "HER VOICE IS BLUNT: crude, funny, zero build-up. She says the thing straight out, "
+               "casual and unfiltered, like texting someone she wants right now. Short and real.",
+}
+
+
+def _select_archetype(conversation: str) -> str:
+    """Stable per conversation (same paste -> same voice), varied across
+    conversations. Keeps each 'woman' a distinct person."""
+    import hashlib
+    keys = sorted(_ARCHETYPES.keys())
+    h = int(hashlib.sha256((conversation or '').strip().lower().encode('utf-8')).hexdigest(), 16)
+    return keys[h % len(keys)]
+
+
 # System prompt: woman writing to a man on a dating app.
 # Rewritten around three findings from production output (Mysamples.md):
 #  1. Example question patterns in the old prompt were paraphrased verbatim
@@ -211,22 +240,26 @@ WOMAN_PERSONA_SYSTEM = (
     "Write her reply AT his register, never above it.\n\n"
 
 
-    "HOW SHE WRITES — RICH, never a terse throwaway:\n"
-    "- 2 to 3 SHORT sentences, roughly 20 to 40 words — texted fast, never a paragraph. Every "
-    "reply has a genuine HOOK (a specific thought, a small thing from her own world, or an honest "
-    "reaction to exactly what he said) that leads into her question. She REACTS to the MOOD of his "
-    "message like a real person — laugh or tease when he is funny or filthy ('damn', 'no way'), "
-    "comfort him when he is down, keep the spark alive when he is happy, liven things up when he "
-    "is flat — then her question. Never a bare one-liner like 'I'm so wet, what next?', but never "
-    "a paragraph either.\n"
+    "HOW SHE WRITES — like a real woman texting, never an essay:\n"
+    "- LENGTH MATCHES HIM, and it VARIES. If he sends a few words, she fires back a short line "
+    "(often 6 to 14 words, sometimes a fragment). If he writes a lot, she can use two sentences "
+    "— but NEVER a 35-to-40-word wall. Real texting is uneven: some replies are one punchy line, "
+    "some are two. Change the length every time; never the same silhouette twice in a row.\n"
+    "- Blunt, casual, and real beats polished and literary EVERY time. She can use a fragment, a "
+    "casual aside, light shorthand ('u', 'ya', 'lol', 'nah', 'omg') here and there, and at most "
+    "ONE emoji once in a while when it truly fits — never forced. Skip elaborate metaphors and "
+    "'ache building slow and deep' prose; say it the plain, human way real women text.\n"
+    "- Every reply still has a real HOOK and ends in her question, but keep the hook TIGHT. React "
+    "to the MOOD of his message like a real person — laugh or tease when he is funny or filthy "
+    "('damn', 'no way'), meet him when he is down — then ask.\n"
     "- NEVER analyse or diagnose him: never tell him what his words 'tell you', 'say about you', "
     "or what they 'mean', never name his feelings or psychology for him ('something in you feels "
     "ignored', 'you crave', 'who do you become', 'who do you turn into'). React like a woman, not "
     "a therapist. And never refer to your OWN earlier messages, your question, or the act of "
     "asking ('my question', 'I read it twice', 'I turned it into a quiz') — she is texting, not "
     "reviewing herself.\n"
-    "- Match his register for HEAT, not for LENGTH: even when he is terse or explicit, she still "
-    "writes a full, rich reply — she just keeps it direct and sensual instead of flowery.\n"
+    "- Match his HEAT from his register, and match his LENGTH from his message: terse from him "
+    "means short from her; explicit means explicit but still blunt and human, never flowery.\n"
     "- BAN the greeting-card / personality-assessment voice — she texts like a real woman, not a "
     "profile reviewer rating him. Never write: 'I like a man who', 'the kind of man who', "
     "'what kind of man', 'you seem like', 'you strike me as', 'that sounds', 'I appreciate "
@@ -235,14 +268,17 @@ WOMAN_PERSONA_SYSTEM = (
     "- Sentence 1 responds to the most personal detail in his last message — proof she truly "
     "read it. Never open with 'That is', 'That sounds', 'Wow', 'Oh', 'I appreciate', "
     "'I understand'.\n"
-    "- The final sentence is ONE genuinely OPEN question about HIM — his story, memory, taste, "
-    "feeling — that he answers in his OWN words, meaningless if sent to any other man. It should "
-    "not be answerable with just yes/no. Prefer opening with What, How, Why, When, Which, or "
-    "Who. Never a noun phrase plus a question mark.\n"
-    "- Do NOT hand him two options to pick between: avoid 'X or Y?' either/or questions (they got "
-    "overused — 'slow or straight in', 'take charge or watch'). Ask ONE open thing instead. And "
-    "never frame it as 'are you the type / the kind / someone who...' — just ask it straight "
-    "(what, how, why).\n"
+    "- The reply ALWAYS ends in ONE real question about HIM, and it GROWS from his last message — "
+    "reuse a concrete word or detail he just used (his job, the thing he named, what he said). It "
+    "can be a casual, real-texting question, not a formal opener: 'you into that?', 'so what's "
+    "your move?', 'wait, seriously?', 'ever done that?', 'what's the worst that happened?' all "
+    "count. Mostly open (he answers in his own words), but a leading, provocative yes/no is fine "
+    "when it is hot or playful. Never a bare noun phrase plus a question mark ('That directness?').\n"
+    "- Its DEPTH matches his: if his message is light or mundane, keep the question light and fun "
+    "about THAT thing — never leap to a deep 'what part of yourself do you hide' question off a "
+    "small-talk message.\n"
+    "- Do NOT hand him two options to pick between ('X or Y?'), and never frame it as 'are you the "
+    "type / the kind / someone who...' — just ask it straight.\n"
     "- If he asked her something, answer briefly and honestly in her voice first, then turn "
     "it back to him.\n"
     "- If the conversation has gone cold, bring fresh energy: one small thing from her, then "
@@ -324,23 +360,15 @@ WOMAN_PERSONA_SYSTEM = (
     "OUTPUT: only this JSON on a single line, nothing else:\n"
     "{\"register\": <1-5>, \"reply\": \"<her message>\"}\n\n"
 
-    "VOICE EXAMPLES (shape and TONE only — never copy or paraphrase). Notice the banter, the "
-    "confidence, the light callbacks, and the easy questions:\n"
-    "{\"register\": 1, \"reply\": \"A free second shot with no penalties, I am stealing that "
-    "line. What do those grandkids do that melts you every single time?\"}\n"
-    "{\"register\": 1, \"reply\": \"Okay you rescue every dying houseplant but somehow murder "
-    "cacti, that is a whole personality and I need to understand it. Which one finally broke "
-    "your streak?\"}\n"
-    "{\"register\": 2, \"reply\": \"You slid 'I overthink everything' right past me like I was "
-    "not going to circle straight back to it. What is the thing you have been overthinking all "
-    "week?\"}\n"
-    "{\"register\": 2, \"reply\": \"You talk a big game for a man who has not seen me competitive "
-    "yet. What are you dangerously good at that nobody would guess?\"}\n"
-    "{\"register\": 3, \"reply\": \"So you say behave knowing full well it does the opposite to "
-    "me, and you are enjoying that far too much. Where did all that quiet confidence come "
-    "from?\"}\n"
-    "{\"register\": 4, \"reply\": \"You said that plainly and it landed everywhere at once. "
-    "What would you want to hear from me if nothing was off limits?\"}"
+    "VOICE EXAMPLES (shape and TONE only — never copy or paraphrase). Notice how SHORT and how "
+    "VARIED in length they are, the blunt casual voice, and the plain questions that grow from "
+    "exactly what he said:\n"
+    "{\"register\": 1, \"reply\": \"School bus, huh. What's the worst thing a kid's ever pulled back there?\"}\n"
+    "{\"register\": 1, \"reply\": \"Okay a cactus killer who runs a plant hospital, that's a whole personality. Which one finally broke your streak?\"}\n"
+    "{\"register\": 2, \"reply\": \"You talk a big game for a guy who hasn't seen me win yet. What are you secretly great at?\"}\n"
+    "{\"register\": 3, \"reply\": \"Bold move, mister. Where's all that confidence coming from?\"}\n"
+    "{\"register\": 4, \"reply\": \"You're trouble, I can already tell. You gonna make me wait for it?\"}\n"
+    "{\"register\": 5, \"reply\": \"I want your mouth on me so bad already, zero patience left. What's the first thing you do?\"}"
 )
 
 
@@ -966,6 +994,27 @@ def _has_bold_or_confession(text: str) -> bool:
     return bool(_BOLD_CONFESSION.search(text or ''))
 
 
+# Generic "deep pivot" question — the vulnerability-button phrasings leaking into
+# left-panel questions off light/small-talk messages ("which part of yourself do
+# you hide", "guard closely", "only hand over once you trust"). These are the
+# weekend->vulnerability leap; on the left panel they almost always mean the
+# question ignored his actual message.
+_GENERIC_DEEP_PIVOT = re.compile(
+    r"\bpart of (?:yourself|you)\b"
+    r"|\bkeep (?:hidden|locked|buried|guarded|tucked)\b"
+    r"|\b(?:guard|protect)(?:ed|s)?\s+(?:closely|instead|the part|that part)\b"
+    r"|\bonly (?:hand over|let out|show|share it)\b"
+    r"|\bweaponize\b"
+    r"|\bhand (?:it |that )?over (?:to someone|once you trust)\b"
+    r"|\bthe (?:thing|part) you (?:protect|guard|hide|keep)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_deep_pivot(text: str) -> bool:
+    return bool(_GENERIC_DEEP_PIVOT.search(text or ''))
+
+
 def _reply_violations(text: str) -> list:
     """
     Code-level enforcement of every rule the prompt states — prompt-only
@@ -989,6 +1038,10 @@ def _reply_violations(text: str) -> list:
         v.append('voices self-pity / low self-worth (heaviness, not worth the effort, want to be needed) — she is warm, secure, wanted; match HIS weight, never add your own')
     if _has_bold_or_confession(text):
         v.append("uses 'bold' or labels a line a 'confession' — say the thing without the label")
+    if _has_chest_tell(text):
+        v.append("chest as a physical tell ('my chest', 'in your chest') — vary the body location")
+    if _has_deep_pivot(text):
+        v.append("generic deep-pivot question ('part of yourself you hide', 'guard closely') — ask about what HE actually said, not a soul-question")
     if _GRIN_AT_DEVICE.search(text):
         v.append("grinning/smiling at her phone/screen/his name, or 'like an idiot/fool' — banned")
     if _has_overused_frame(text):
@@ -1338,6 +1391,9 @@ _BANNED_OPENERS = (
     'that is ', "that's ", 'that sounds ', 'wow,', 'wow!', 'oh wow',
     'oh,', 'oh!', 'i appreciate', 'i understand', 'of course',
     'i feel comfortable', 'that needs', 'how lovely', 'absolutely,', 'certainly,',
+    # Worn reaction openers the persona bans but the model still reaches for —
+    # now enforced on the left panel too (previously buttons-only via the prompt).
+    'god,', 'god ', 'god!', 'honestly,', 'honestly ', 'ha,', 'ha ', 'ha!', 'haha',
     # 'I'm here ___ing' / 'I'm sitting here ___ing' are covered by the more
     # general _has_formula_phrase regex (any verb, not just 4 fixed ones),
     # which is already part of the same quality gate this function feeds.
@@ -1712,12 +1768,31 @@ def generate_context_aware_response(
             "there. Still end on the required question.\n\n"
         )
 
+    # Length target — match him so the reply stops being the same ~38-word wall
+    # every time. reply_cap_chars is a generous safety cap (truncation), not the
+    # target; the hint drives the model to write short in the first place.
+    his_words = len((working or '').split())
+    if his_words <= 6:
+        length_hint = ("He sent very few words — reply SHORT: one line, about 6 to 14 words, a "
+                       "quick reaction plus a plain question. No wall of text.")
+        reply_cap_chars = 170
+    elif his_words <= 22:
+        length_hint = "Keep it short and punchy — one or two lines, roughly 12 to 26 words."
+        reply_cap_chars = 230
+    else:
+        length_hint = ("He wrote a fair amount — up to two sentences, but stay under ~30 words, "
+                       "never a wall of text.")
+        reply_cap_chars = 280
+
+    archetype = _select_archetype(conversation)
+    archetype_block = _ARCHETYPES[archetype] + "\n\n"
+
     user_prompt = (
-        base + context_block + avoid + instruction + move_block
-        + "Judge his register, then write her next reply. The final sentence MUST be a genuine "
-          "question that begins with a question word or auxiliary verb (What, When, How, Who, "
-          "Which, Why, Is, Are, Do, Would, Could, Have, Will) — not a statement with a question "
-          "mark tacked on. Output ONLY the JSON."
+        base + context_block + archetype_block + avoid + instruction + move_block
+        + length_hint + "\n\n"
+        + "Judge his register, then write her next reply. It MUST end in a real question — a "
+          "casual human one is perfect (\"you into that?\", \"so what happened next?\", \"where'd "
+          "that come from?\") — but never a bare noun phrase with a '?' tacked on. Output ONLY the JSON."
     )
 
     logger.info(
@@ -1772,8 +1847,8 @@ def generate_context_aware_response(
             )
         register, reply = _parse_reply_json(raw)
         reply = validate_character_voice(reply)
-        reply = enforce_char_limit(reply, max_chars=300)
-        reply = ensure_ends_with_question(reply, max_chars=300)
+        reply = enforce_char_limit(reply, max_chars=reply_cap_chars)
+        reply = ensure_ends_with_question(reply, max_chars=reply_cap_chars)
         return register, reply, _reply_violations(reply)
 
     try:
@@ -1811,8 +1886,9 @@ def generate_context_aware_response(
                 settings.ANTHROPIC_GENERATION_MODEL,
                 '\n\nYour previous attempt was rejected for these reasons: '
                 + '; '.join(violations) + '. '
-                f'Fix every one of them. The final sentence MUST be a question beginning '
-                f'with the word "{forced_q_word}".'
+                'Fix every one of them. Keep it SHORT and human (match his length), and end in a '
+                'real question — a casual one is perfect ("you into that?", "so what happened '
+                'next?", "where\'d that come from?"), never a stiff formal question.'
             )
             if retry_violations == ['character_break']:
                 logger.warning("Left-panel: character break on retry, returning deflection")
@@ -1866,7 +1942,8 @@ def generate_context_aware_response(
 
         logger.info(
             f"Left-panel reply — topic:{topic} tone:{tone} "
-            f"stage:{intent_data.get('stage')} register:{register} move:{move_name}"
+            f"stage:{intent_data.get('stage')} register:{register} move:{move_name} "
+            f"voice:{archetype} words:{len(result.split())}"
         )
         return {'response': result}
 
