@@ -1940,6 +1940,11 @@ def generate_context_aware_response(
         except Exception as e:
             logger.warning(f"either/or open-up failed: {e}")
 
+        # Final cleanup: the dedup/governor/open-up rewrites above run AFTER the
+        # in-_generate validate_character_voice, so a rewrite could reintroduce an
+        # em-dash or 'actually'. Re-clean the final text once (idempotent).
+        result = validate_character_voice(result)
+
         logger.info(
             f"Left-panel reply — topic:{topic} tone:{tone} "
             f"stage:{intent_data.get('stage')} register:{register} move:{move_name} "

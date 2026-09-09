@@ -1873,8 +1873,10 @@ def validate_character_voice(text: str) -> str:
     for phrase in ai_phrases:
         text = text.replace(phrase, '').replace(phrase.lower(), '')
 
-    # Em / en / horizontal-bar dashes → period + space (all variants, not just —)
-    text = re.sub(r'[.!?]?\s*[—–―]\s*', '. ', text)
+    # Em / en / horizontal-bar / figure / minus dashes → period + space (all the
+    # dash-as-sentence-break variants; NOT the plain hyphen, which is real in
+    # hyphenated words).
+    text = re.sub(r'[.!?]?\s*[—–―‒﹘−]\s*', '. ', text)
     text = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), text)
 
     # Strip 'actually' — single most common AI verbal tic; system prompt isn't enough alone
