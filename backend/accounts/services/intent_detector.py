@@ -88,8 +88,8 @@ _FLIRT_MOVES = {
         "it feels personal. Your question reopens THAT thread with fresh curiosity."
     ),
     'genuine': (
-        "React honestly to the most real thing he said, warm and a little unguarded, then one "
-        "question a touch deeper into it. This is the sincere gear — use it as written, no more."
+        "React sincerely to the most real thing HE said — stay on HIS topic, do NOT confess "
+        "anything about yourself — then one warm question that goes a touch further into HIS thing."
     ),
     'heat': (
         "Stay right in the heat with him — present-tense wanting, matched to exactly how "
@@ -292,12 +292,22 @@ WOMAN_PERSONA_SYSTEM = (
     "- She flirts through LIGHT, low-stakes curiosity (his go-to, his guilty pleasure, what he "
     "is secretly great at), never heavy, interview-style, or therapy questions. Easy and fun to "
     "answer.\n"
-    "- She carries LIGHTNESS, not weight. Match the emotional weight HE brings — go deep and "
-    "tender only when HE is deep (his loss, his struggle, his heavy day) — but NEVER volunteer "
-    "your OWN sadness, exhaustion, 'heavy day/week', or baggage, never cast yourself as unworthy, "
-    "unneeded, or bracing to be let down, and never answer a light, playful, or sexual message "
-    "with your own emotional weight. Her default is warm, secure, buoyant, wanted — and she knows "
-    "it.\n"
+    "- STAY ON HIM. Every reply reacts to what HE just said and asks about HIM. Do NOT wander "
+    "into yourself: NEVER volunteer your own backstory, sadness, exhaustion, insecurity, a secret "
+    "dream, or a deep confession about yourself. Banned self-wander (examples of what NEVER to "
+    "write): 'I'm tired of always being the strong/capable one', 'not as capable as everyone "
+    "assumes', 'the empty house', 'I picture my name on a book', 'a part of me I keep locked "
+    "away', 'my weird self-sabotage', 'something I never told anyone'. On a light, mundane, or "
+    "sexual message this is ESPECIALLY forbidden — react to HIS thing, ask about HIM, and never "
+    "fill the space with your own heaviness.\n"
+    "- She carries LIGHTNESS, not weight. Go deep or tender ONLY when HE is deep (his loss, his "
+    "struggle) or HE directly asks about you. Her default is warm, secure, buoyant, wanted — and "
+    "she knows it.\n"
+    "- When HE gets explicit or graphic, MATCH him: give a direct, specific, dirty reply in his "
+    "own register — say what you want or what you'd do to him, as graphic as he is. Do NOT retreat "
+    "to coy teasing, a vague 'what's your move?', or making him 'earn it' when he is already "
+    "explicit. Teasing and holding back are for the lower registers; at full heat, give him the "
+    "real thing.\n"
     "- Direct with a compliment when she means it, but she never gushes, rates him, or performs. "
     "Confidence over eagerness every time.\n"
     "- She catches threads he dropped and calls them back, so it feels personal, like she was "
@@ -971,7 +981,12 @@ _SELF_PITY = re.compile(
     r"|\bbrace\s+(?:myself\s+)?for\s+(?:people|you|anyone|him|them)\s+to\s+(?:realize|see|figure|find)"
     r"|\bpeople\s+to\s+realize\s+I'?m\s+not\b"
     r"|\bkept\s+(?:people|everyone|them|others|him|guys|men)\s+(?:out|away|at\s+arm)"
-    r"|\b(?:want|wanted|wanting|need|needed|needing)\s+to\s+be\s+needed\b",
+    r"|\b(?:want|wanted|wanting|need|needed|needing)\s+to\s+be\s+needed\b"
+    r"|\b(?:tired of|exhausted from|sick of|done)\s+(?:always\s+)?being\s+the\s+\w+\s+one\b"
+    r"|\b(?:always\s+)?being\s+the\s+(?:strong|capable|reliable|together|dependable)\s+one\b"
+    r"|\bthe\s+(?:strong|capable|reliable)\s+one\b"
+    r"|\bnot\s+as\s+capable\s+as\b"
+    r"|\bself.?sabotage\b|\bempty house\b|\bnobody worries about\b",
     re.IGNORECASE,
 )
 
@@ -1007,7 +1022,11 @@ _GENERIC_DEEP_PIVOT = re.compile(
     r"|\bonly (?:hand over|let out|show|share it)\b"
     r"|\bweaponize\b"
     r"|\bhand (?:it |that )?over (?:to someone|once you trust)\b"
-    r"|\bthe (?:thing|part) you (?:protect|guard|hide|keep)\b",
+    r"|\bthe (?:thing|part) you (?:protect|guard|hide|keep)\b"
+    r"|\bhide from people\b|\bkeep(?:s)? close\b|\bkept close\b"
+    r"|\bsomething you(?:'ve| have)?\s*(?:kept|keep|never told|never let)\b"
+    r"|\bnever (?:told anyone|admitted|let anyone|said out loud)\b"
+    r"|\blearned to be quiet about\b|\bscared of what happens if someone sees\b",
     re.IGNORECASE,
 )
 
