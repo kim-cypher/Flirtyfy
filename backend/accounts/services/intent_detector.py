@@ -596,30 +596,68 @@ def _heat_deflect(user_id):
         return None
 
 
+def _light_deflect(user_id):
+    """A warm, PLAYFUL, light redirect for a non-explicit conversation that failed
+    the gate — keeps it fun without answering anything, and (crucially) WITHOUT
+    the deep/self-pity content the vulnerability button produces. Guarded against
+    wander leaks. Best-effort; returns None on failure."""
+    from django.conf import settings
+    model = getattr(settings, 'ANTHROPIC_REWRITE_MODEL', 'claude-haiku-4-5')
+    prompt = (
+        "Write a short, warm, PLAYFUL dating-app text (18 to 24 words) that keeps things light "
+        "and fun WITHOUT answering anything specific. Confident and casual, a little teasing. Do "
+        "NOT get deep, sad, or sexual, and NEVER confess anything about yourself. End with ONE "
+        "easy, fun question about HIM. Output only the message."
+    )
+    try:
+        resp = get_anthropic_client().messages.create(
+            model=model,
+            system="You output only the requested message, nothing else.",
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=1.0,
+            max_tokens=60,
+        )
+        log_ai_usage(logger, 'LIGHT_DEFLECT', model, resp, user_id=user_id)
+        out = (resp.content[0].text or '').strip().strip('"')
+        if not out or _has_self_pity(out) or _has_deep_pivot(out) or _has_meeting_fantasy(out) or _has_logistics_leak(out):
+            return None
+        return ensure_ends_with_question(out, max_chars=220)
+    except Exception as e:
+        logger.warning("light deflect failed: %s", e)
+        return None
+
+
+# Clean, light static last-resort deflections (no deep/heat/self-pity). Only hit
+# if the LLM deflect calls fail (API down) or user_id is missing.
+_STATIC_DEFLECTS = [
+    "Okay you've got my attention now. What's actually on your mind over there?",
+    "Mm, you're already a lot of fun. So what are you really after here?",
+    "You're keeping me on my toes, I'll give you that. What's your story today?",
+]
+
+
 def _deflect(user_id, time_slot=None, heat=False):
     """
-    Replaces the old static 6-line _SEDUCTIVE_DEFLECTIONS pool — that pool
-    repeated verbatim across users/conversations, exactly the kind of fixed
-    text the dedup work elsewhere is meant to eliminate.
+    Context-aware in-character deflection when a reply can't pass the gate.
 
-    For an EXPLICIT conversation (heat=True) it deflects with a warm, in-the-heat
-    redirect so the reply doesn't lurch into a deep vulnerability question
-    mid-sexual-chat. Otherwise it routes through the 'vulnerability' button:
-    full opener-style/tone/question-category rotation, structural validation,
-    and DB-backed 30-day dedup — never the same fixed line twice.
+    EXPLICIT chat (heat=True) -> a warm in-the-heat redirect (_heat_deflect).
+    Everything else -> a LIGHT playful redirect (_light_deflect).
+
+    Deliberately NO LONGER routes through the 'vulnerability' button: that button
+    produces deep/self-pity soul-questions by design, which is exactly the
+    off-topic "wander" we're killing — a mundane message that failed twice used
+    to deflect into "what part of yourself do you guard so closely?".
     """
     if user_id is not None:
-        if heat:
-            hot = _heat_deflect(user_id)
-            if hot:
-                return {'response': hot}
-        result = generate_button_response(user_id, 'vulnerability', time_slot=time_slot)
-        if 'response' in result:
-            return {'response': result['response']}
-    # True last resort — only reached if user_id is missing or the button
-    # generator itself fails (e.g. API outage).
-    logger.warning("Deflection fallback exhausted — returning static last-resort line")
-    return {'response': "I'm not thinking about any of that right now. What's been on your mind today?"}
+        primary = _heat_deflect(user_id) if heat else _light_deflect(user_id)
+        if primary:
+            return {'response': primary}
+        # cross-fallback: try the other flavor before the static pool
+        secondary = _light_deflect(user_id) if heat else _heat_deflect(user_id)
+        if secondary:
+            return {'response': secondary}
+    logger.warning("Deflection fell back to static line — user:%s", user_id)
+    return {'response': random.choice(_STATIC_DEFLECTS)}
 
 # Output gate — detect when the LLM broke character or disclosed AI identity.
 # Any reply matching this is discarded and replaced with a seductive fallback.
@@ -986,7 +1024,9 @@ _SELF_PITY = re.compile(
     r"|\b(?:always\s+)?being\s+the\s+(?:strong|capable|reliable|together|dependable)\s+one\b"
     r"|\bthe\s+(?:strong|capable|reliable)\s+one\b"
     r"|\bnot\s+as\s+capable\s+as\b"
-    r"|\bself.?sabotage\b|\bempty house\b|\bnobody worries about\b",
+    r"|\bself.?sabotage\b|\bempty house\b|\bnobody worries about\b"
+    r"|\bpicture a (?:whole )?life\b|\bscared to (?:even )?(?:name|say) it\b"
+    r"|\btoo big to (?:say|name)\b",
     re.IGNORECASE,
 )
 
@@ -1023,7 +1063,9 @@ _GENERIC_DEEP_PIVOT = re.compile(
     r"|\bweaponize\b"
     r"|\bhand (?:it |that )?over (?:to someone|once you trust)\b"
     r"|\bthe (?:thing|part) you (?:protect|guard|hide|keep)\b"
-    r"|\bhide from people\b|\bkeep(?:s)? close\b|\bkept close\b"
+    r"|\bhide from people\b|\bkeep(?:s|ing)? close(?:st)?\b|\bkept close\b"
+    r"|\bkeep(?:s|ing)? (?:it )?private\b|\brarely let (?:others|anyone) see\b"
+    r"|\bclose(?:st)? to (?:your|my|the) heart\b"
     r"|\bsomething you(?:'ve| have)?\s*(?:kept|keep|never told|never let)\b"
     r"|\bnever (?:told anyone|admitted|let anyone|said out loud)\b"
     r"|\blearned to be quiet about\b|\bscared of what happens if someone sees\b",
