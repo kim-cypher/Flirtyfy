@@ -391,6 +391,9 @@ _INTIMACY_WORDS = {
     'sex', 'fuck', 'cock', 'dick', 'pussy', 'ass', 'naked', 'horny', 'clit',
     'orgasm', 'cum', 'blow', 'suck', 'breast', 'nipple', 'hard', 'wet',
     'bed', 'bedroom', 'naughty', 'dirty', 'kinky', 'fantasy', 'desire',
+    # explicit-act words that show up mid-scene without the obvious keywords
+    'lube', 'lick', 'licking', 'stroke', 'stroking', 'squirt', 'moan', 'balls',
+    'tits', 'tongue', 'cumming', 'foreplay', 'grind', 'thrust', 'fingering',
 }
 _FOOD_WORDS = {'food', 'eat', 'dinner', 'lunch', 'breakfast', 'cook', 'restaurant', 'meal', 'hungry'}
 _WORK_WORDS = {'work', 'job', 'career', 'office', 'boss', 'meeting', 'client', 'busy'}
