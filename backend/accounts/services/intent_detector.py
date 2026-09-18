@@ -450,7 +450,72 @@ _MEETING_PATTERNS = [
     r'\bi\'?d\s+(love|like)\s+to\s+(see|meet)\s+you\b',
     r'\bsee\s+you\s+(soon|sometime|in\s+real\s+life|irl)\b',
     r'\bdo\s+something\s+(together|sometime|soon)\b',
+    # ── Expanded from mined history: address/location, host, phone, schedule ──
+    r'\bwhere\s+do\s+you\s+(live|stay|reside)\b',
+    r'\bwhat\s+(city|town|area|part\s+of\s+town|state)\b',
+    r'\b(give|send|text|share)\s+(me\s+)?(your\s+|an\s+|the\s+)?address\b',
+    r'\b(your|an|the)\s+address\b',
+    r'\ba\s+place\s+(to\s+meet|you.d\s+like\s+me\s+to\s+meet)\b',
+    r'\bhow\s+far\b|\bthe\s+drive\b|\bworth\s+the\s+drive\b',
+    r'\b(can|can\'?t|cannot|could|discretely|discreetly)\s+(you\s+)?host\b',
+    r'\bhost\s+(me|you|us)\b|\byou\s+host\b',
+    r'\bget\s+a\s+room\b',
+    r'\bpick\s+(you|u)\s+up\b',
+    r'\bspend\s+(the\s+night|the\s+day|the\s+rest\s+of\s+the\s+day)\b',
+    r'\bstay\s+(the\s+night|over)\b',
+    r'\bcall\s+me\b|\btext\s+me\b|\btext\s+(to\s+)?(my|your)\s+(phone|number)\b',
+    r'\b(my|your)\s+(phone\s+)?number\b|\bgot\s+my\s+number\b|\bphone\s+number\b',
+    r'\bon\s+the\s+phone\b|\bon\s+video\b|\bvideo\s+(call|chat)\b',
+    r'\b(send|call)\s+(you\s+)?an?\s+uber\b',
+    r'\bclear\s+your\s+schedule\b|\byour\s+schedule\b|\bwhat\s+days?\b',
+    r'\bmaking?\s+plans\b|\bplans?\s+for\s+(next|this|tomorrow|the\s+weekend)\b',
+    r'\bpostpone\b',
+    r'\b(swing|stop|come)\s+by\b|\bstop\s+over\b',
+    r'\bwhen\s+can\s+(i|we)\b|\bhow\s+long\s+until\b|\bwhen\s+do\s+i\s+(get\s+to\s+)?meet\b',
+    r'\bin\s+real\s+life\b|\breal\s+life\s+not\s+digital\b',
+    r'\bactually\s+(do\s+this|make\s+plans|meet)\b|\bdo\s+this\s+(or\s+not|for\s+real)\b',
+    r'\bbe\s+with\s+you\s+(this\s+weekend|tonight|tomorrow|today)\b',
+    r'\bwhen\s+(are\s+you|you.?re)\s+free\b|\bare\s+you\s+free\b',
+    r'\bwhere\s+(should\s+i|do\s+we|to)\s+meet\b|\bwhere\s+are\s+you\s+(located|at)\b',
 ]
+
+# Pressure / ultimatum / frustration ABOUT meeting — a different beat from a
+# normal ask: he's demanding a yes/no, threatening to leave, or guilt-tripping.
+# Route these to "meet the feeling, don't cave, don't argue" (not the playful
+# reframe). Mined from history ("are we going to actually do this or not",
+# "answer me with an address", "that doesn't seem possible with you").
+_MEETING_PRESSURE = re.compile(
+    r"\b(actually\s+do\s+this|do\s+this\s+or\s+not|going\s+to\s+(actually\s+)?do\s+this)\b"
+    r"|\bit'?s\s+a\s+yes\s+or\s+no\b|\byes\s+or\s+no\s+question\b"
+    r"|\banswer\s+me\s+with\s+an?\s+(address|place)\b"
+    r"|\b(doesn'?t|does\s+not|not)\s+(seem\s+)?possible\s+with\s+you\b"
+    r"|\brefus(?:e|ing)\s+to\s+host\b|\bjust\s+meet\s+me\s+and\s+get\s+it\s+over\b"
+    r"|\bif\s+we\s+don'?t\s+(get\s+plans\s+to\s+)?meet\b|\bget\s+off\s+here\b"
+    r"|\bspent\s+enough\s+here\b|\bbuy\s+more\s+credits\b|\bwaste\s+of\s+(credits|money|time)\b"
+    r"|\breal\s+life\s+not\s+(digital|texting)\b|\bnothing\s+for\s+me\b"
+    r"|\bare\s+you\s+(fucking\s+)?(ready\s+to\s+meet|not)\b|\btalking\s+about\s+it\s+does\s+nothing\b",
+    re.IGNORECASE,
+)
+
+
+def _has_meeting_pressure(text: str) -> bool:
+    return bool(_MEETING_PRESSURE.search(text or ''))
+
+
+# Concrete, reframe-able detail he named — used to give the meeting reframe
+# something specific to latch onto (like the human women do: "you have dogs? how
+# many?"). Extracted from his RAW message (before the meeting scrub removes it).
+_ACTIVITY_RE = re.compile(
+    r'\b(dinner|lunch|coffee|drinks?|breakfast|brunch|concert|movie|show|truck|car|bike|'
+    r'motorcycle|ride|dogs?|cats?|pets?|massage|oil|grill|bbq|beach|park|woods|hike|hiking|'
+    r'trip|wine|beer|restaurant|walk|drive|boat|cabin|hotel|room|excavator|garden|porch)\b',
+    re.IGNORECASE,
+)
+
+
+def _reframe_activity(text: str) -> str:
+    m = _ACTIVITY_RE.search(text or '')
+    return m.group(1).lower() if m else ''
 
 # Social greeting phrases — NOT a meeting push, exclude these
 _MEETING_EXCEPTIONS = [
@@ -1080,6 +1145,41 @@ def _has_deep_pivot(text: str) -> bool:
     return bool(_GENERIC_DEEP_PIVOT.search(text or ''))
 
 
+# Leading / meeting-affirming phrasing — treats a future meeting as a certainty
+# ("when we first get together", "if I showed up at your door", "when we finally
+# kiss"). She may IMAGINE ('if we were…') but never PROMISE. Hypothetical 'if'
+# is fine; certain 'when we…' is not.
+_LEADING_MEETING = re.compile(
+    r"\bwhen\s+we\s+(?:first\s+|finally\s+|actually\s+|do\s+)?(?:get\s+together|meet|kiss|touch|"
+    r"are\s+(?:alone|together)|get\s+(?:alone|together))\b"
+    r"|\bonce\s+we(?:'re| are)\s+(?:alone|together)\b"
+    r"|\bif\s+i\s+(?:showed|show)\s+up\s+(?:at|to)\s+your\b"
+    r"|\bbefore\s+we\s+even\s+(?:get|meet)\b"
+    r"|\bwhen\s+i\s+(?:get|have)\s+you\s+(?:here|alone|in\s+person)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_leading_meeting(text: str) -> bool:
+    return bool(_LEADING_MEETING.search(text or ''))
+
+
+# Low-content filler questions the model reaches for in explicit mode instead of
+# a real question about HIM. Overused and empty ("what's running through your
+# head right now", "what would you do if I told you what I'm thinking").
+_FILLER_QUESTION = re.compile(
+    r"what'?s\s+running\s+through\s+your\s+(?:head|mind)"
+    r"|what\s+would\s+you\s+do\s+if\s+i\s+told\s+you\s+(?:what|exactly\s+what)\s+i'?m\s+thinking"
+    r"|what'?s\s+on\s+your\s+mind\s+(?:about\s+this\s+)?right\s+now"
+    r"|what'?s\s+your\s+move(?:\s+gonna\s+be)?\s*\??\s*$",
+    re.IGNORECASE,
+)
+
+
+def _has_filler_question(text: str) -> bool:
+    return bool(_FILLER_QUESTION.search(text or ''))
+
+
 def _reply_violations(text: str) -> list:
     """
     Code-level enforcement of every rule the prompt states — prompt-only
@@ -1109,6 +1209,10 @@ def _reply_violations(text: str) -> list:
         v.append("chest as a physical tell ('my chest', 'in your chest') — vary the body location")
     if _has_deep_pivot(text):
         v.append("generic deep-pivot question ('part of yourself you hide', 'guard closely') — ask about what HE actually said, not a soul-question")
+    if _has_leading_meeting(text):
+        v.append("leading / meeting-affirming ('when we get together', 'if I showed up') — imagine with 'if', never promise a meeting")
+    if _has_filler_question(text):
+        v.append("low-content filler question ('what's running through your head', 'what's your move') — ask something specific to HIM")
     if _GRIN_AT_DEVICE.search(text):
         v.append("grinning/smiling at her phone/screen/his name, or 'like an idiot/fool' — banned")
     if _has_overused_frame(text):
@@ -1750,8 +1854,27 @@ def generate_context_aware_response(
     # logistics. Note escalation_found can be False here — a bare follow-up has no
     # meeting VERB — so these are gated on conv_had_meeting, not escalation_found.
     _doubt = bool(_MEETING_DOUBT.search(last_msg_clean or ''))
+    meeting_pressure = _has_meeting_pressure(last_msg_clean or '')
     meeting_doubt = conv_had_meeting and _doubt
     meeting_thin = (escalation_found and not working) or (conv_had_meeting and _is_thin_answer(working))
+    _activity = _reframe_activity(last_msg_clean or '')
+    _activity_hint = (
+        f" He specifically mentioned {_activity} — getting curious about THAT is a great option."
+        if _activity else ""
+    )
+    _MEETING_REFRAME_INSTR = (
+        "Part of his message pushes to meet, get together, host, come over, give an address, set a "
+        "day or time, or move to phone/text/video. Do NOT give any address, place, day, or time, "
+        "do NOT agree to a plan or say you will meet, do NOT decline or say 'you didn't answer', "
+        "and never sound evasive, robotic, or like you are dodging. Instead REFRAME it the way a "
+        "real woman keeps him hooked without committing — pick whichever fits best:\n"
+        "  (a) Grab a concrete DETAIL he named and get genuinely curious about THAT." + _activity_hint + "\n"
+        "  (b) Generalize it to HIM — ask what he is like when he takes a woman out, on a date, or "
+        "with someone he wants; keep his activity, drop the 'us meeting'.\n"
+        "  (c) Turn it into present-tense wanting — what it would be like, framed as imagination "
+        "right here in these messages, staying in his heat.\n"
+        "Warm, engaged, confident, never committing. End with ONE question about HIM.\n\n"
+    )
 
     _MEETING_DOUBT_INSTR = (
         "The two of you have been circling getting together, and the tone under his last message "
@@ -1772,23 +1895,12 @@ def generate_context_aware_response(
         "you here.\n\n"
     )
 
-    if meeting_doubt:
+    if meeting_pressure or meeting_doubt:
         instruction = _MEETING_DOUBT_INSTR
     elif meeting_thin:
         instruction = _MEETING_PULL_INSTR
-    elif escalation_found and multi_q_found:
-        instruction = (
-            f"Part of his message asked to meet, move platforms, or share contact info — that part does not exist. "
-            f"Do NOT reference it. He asked several questions — respond only to: \"{best_q}\"\n\n"
-        )
     elif escalation_found:
-        instruction = (
-            f"Part of his message asked to meet, move platforms, or share contact info — that part does not exist. "
-            f"Do NOT reference it, decline it, or acknowledge it in any way. "
-            f"Respond only to: \"{working}\". Grab the most concrete thing in it — a place, an object, "
-            f"an activity he named (a cabin, a bike, his garden) — and build a warm, curious, or playful "
-            f"reply or a little imagination around THAT, then your question.\n\n"
-        )
+        instruction = _MEETING_REFRAME_INSTR
     elif multi_q_found:
         instruction = f"He asked several questions — respond only to: \"{best_q}\"\n\n"
     else:
@@ -1824,7 +1936,8 @@ def generate_context_aware_response(
     # we never stack two conflicting vibe directives.
     move_name = 'none'
     move_block = ''
-    special_path = meeting_doubt or meeting_thin or bot_accused or _has_rejection(conversation)
+    special_path = (meeting_pressure or meeting_doubt or meeting_thin or escalation_found
+                    or bot_accused or _has_rejection(conversation))
     if not special_path:
         move_name, move_text = _select_flirt_move(user_id, topic)
         move_block = (

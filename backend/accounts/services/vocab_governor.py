@@ -68,6 +68,8 @@ _SEED_WATCH = {
     'ache_body': r'\bach(?:e|es|ing)\b',
     'highlight_reel': r'\bhighlight reel\b',
     'right_now': r'\bright now\b',
+    'picturing': r'\bpictur(?:e|es|ing|ed)\b',
+    'imagining': r'\bimagin(?:e|es|ing|ed)\b',
 }
 
 _STOP = {
