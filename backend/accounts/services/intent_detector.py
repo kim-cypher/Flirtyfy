@@ -671,8 +671,10 @@ def _heat_deflect(user_id):
         log_ai_usage(logger, 'HEAT_DEFLECT', model, resp, user_id=user_id)
         out = (resp.content[0].text or '').strip().strip('"')
         if (not out or _has_meeting_fantasy(out) or _has_logistics_leak(out)
-                or _has_time_mention(out) or _has_temporal_leak(out)):
-            return None  # leaked proximity/meeting/time — caller falls back to vulnerability button
+                or _has_time_mention(out) or _has_temporal_leak(out)
+                or _has_filler_question(out) or _has_first_x_question(out)
+                or _has_directness_reaction(out)):
+            return None  # leaked proximity/meeting/time OR a crutch — caller retries/falls back
         return ensure_ends_with_question(out, max_chars=300)
     except Exception as e:
         logger.warning("heat deflect failed: %s", e)
@@ -702,7 +704,9 @@ def _light_deflect(user_id):
         )
         log_ai_usage(logger, 'LIGHT_DEFLECT', model, resp, user_id=user_id)
         out = (resp.content[0].text or '').strip().strip('"')
-        if not out or _has_self_pity(out) or _has_deep_pivot(out) or _has_meeting_fantasy(out) or _has_logistics_leak(out):
+        if (not out or _has_self_pity(out) or _has_deep_pivot(out) or _has_meeting_fantasy(out)
+                or _has_logistics_leak(out) or _has_filler_question(out)
+                or _has_first_x_question(out) or _has_directness_reaction(out)):
             return None
         return ensure_ends_with_question(out, max_chars=220)
     except Exception as e:
@@ -2183,6 +2187,22 @@ def generate_context_aware_response(
                     logger.info(f"Left-panel either/or question opened up — user:{user_id}")
         except Exception as e:
             logger.warning(f"either/or open-up failed: {e}")
+
+        # Final crutch polish — dedup/governor/deflect paths are ungated for the
+        # SOFT quality crutches, so a filler / first-spot / deep-pivot question
+        # can still reach here. Swap just that question for a fresh open one.
+        try:
+            if _has_filler_question(result) or _has_first_x_question(result) or _has_deep_pivot(result):
+                _s2 = re.split(r'(?<=[.!?])\s+', result.strip())
+                if _s2 and _s2[-1].rstrip().endswith('?'):
+                    _nq2 = _open_up_question(get_anthropic_client(), _s2[-1])
+                    if _nq2 and not (_has_filler_question(_nq2) or _has_first_x_question(_nq2)
+                                     or _has_deep_pivot(_nq2)):
+                        _s2[-1] = _nq2
+                        result = ' '.join(_s2)
+                        logger.info(f"Left-panel crutch question swapped — user:{user_id}")
+        except Exception as e:
+            logger.warning(f"crutch polish failed: {e}")
 
         # Final cleanup: the dedup/governor/open-up rewrites above run AFTER the
         # in-_generate validate_character_voice, so a rewrite could reintroduce an
