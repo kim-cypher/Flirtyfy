@@ -477,6 +477,15 @@ _MEETING_PATTERNS = [
     r'\bbe\s+with\s+you\s+(this\s+weekend|tonight|tomorrow|today)\b',
     r'\bwhen\s+(are\s+you|you.?re)\s+free\b|\bare\s+you\s+free\b',
     r'\bwhere\s+(should\s+i|do\s+we|to)\s+meet\b|\bwhere\s+are\s+you\s+(located|at)\b',
+    # ── Second pass from the meeting harness misses ──
+    r'\bcan\s?not\s+host\b',
+    r'\bgo\s+to\s+(dinner|lunch|coffee|drinks|breakfast|a\s+movie)\b',
+    r'\b(dinner|lunch|coffee|drinks|breakfast)\s+first\b',
+    r'\bsomething\s+to\s+eat\b|\bgrab\s+(a\s+)?bite\b',
+    r'\b(coffee|lunch|dinner|drinks|breakfast)\s+(and|,)\s+(something|a\s+bite|food|eat)\b',
+    r'\bcall(?:ed)?\s+me\b|\bcall\s+you\b',
+    r'\bpick(?:ing)?\s+(?:me|you|u)\s+up\b',
+    r'\bwhat\s+time\b',
 ]
 
 # Pressure / ultimatum / frustration ABOUT meeting — a different beat from a
