@@ -1908,6 +1908,9 @@ def generate_context_aware_response(
     meeting_pressure = _has_meeting_pressure(last_msg_clean or '')
     meeting_doubt = conv_had_meeting and _doubt
     meeting_thin = (escalation_found and not working) or (conv_had_meeting and _is_thin_answer(working))
+    # His direct question (single OR multiple) — to prioritize answering it.
+    _qs = [s for s in _split_sentences(working) if s.rstrip().endswith('?')] if working else []
+    _his_question = best_q if multi_q_found else (_qs[-1] if _qs else '')
     _activity = _reframe_activity(last_msg_clean or '')
     _activity_hint = (
         f" He specifically mentioned {_activity} — getting curious about THAT is a great option."
@@ -1952,8 +1955,15 @@ def generate_context_aware_response(
         instruction = _MEETING_PULL_INSTR
     elif escalation_found:
         instruction = _MEETING_REFRAME_INSTR
-    elif multi_q_found:
-        instruction = f"He asked several questions — respond only to: \"{best_q}\"\n\n"
+    elif _his_question:
+        instruction = (
+            "He ASKED you something: \"" + _his_question + "\". PRIORITY: answer it first — briefly "
+            "and specifically in her voice. A getting-to-know question (food, work, where she's "
+            "from, her day) gets a short REAL answer; a cheeky or explicit one gets a short playful "
+            "answer. Do NOT ignore his question or replace it with a generic opener. Then turn it "
+            "back with ONE question about him. If there is nothing else in his message to grab, "
+            "just answer him and ask back — keep it tight.\n\n"
+        )
     else:
         instruction = ''
 
