@@ -92,9 +92,10 @@ _FLIRT_MOVES = {
         "anything about yourself — then one warm question that goes a touch further into HIS thing."
     ),
     'heat': (
-        "Stay right in the heat with him — present-tense wanting, matched to exactly how "
-        "explicit he got, never swerving to a safe topic. Your question pulls him deeper into "
-        "the moment, not out of it."
+        "Stay hot and engaged with exactly what he said, but PLAYFUL and WITTY rather than "
+        "graphic — turn his claim into a game (challenge him, get curious about his skill, or "
+        "raise the stakes). Never swerve to a safe topic, never go clinical or list body parts. "
+        "Your question keeps him chasing."
     ),
 }
 # Favor LIGHT/PLAYFUL (what's missing); 'genuine' is a minority on purpose — the
@@ -107,16 +108,15 @@ _FLIRT_MOVE_WEIGHTS = {
 # Explicit replies kept clustering on control/pace ("slow or fast", "give up
 # control"). These rotate the ANGLE of an in-the-heat reply so it varies the
 # aspect it explores. Code-picked per reply, previous angle excluded.
+# Wit-first angles (safer + hotter than graphic body-description). Each turns his
+# explicit claim into a game instead of a clinical reply.
 _HEAT_ANGLES = {
-    'anticipation': 'the build-up and teasing before anything happens — the wait, the almost',
-    'sensation':    'how it actually feels physically — texture, heat, pressure, the sensation itself',
-    'his_desire':   'what HE wants most right now, his craving, exactly what he is picturing',
-    'her_effect':   'the effect she has on him — what she does to him, how undone he gets',
-    'scenario':     'one specific vivid imagined scene she puts the two of them in',
-    'tenderness':   'the tender, intimate side inside the heat — closeness and want, not just intensity',
-    'reactions':    'the sounds and reactions — what gives him away when he loses it',
-    'his_move':     'how HE would start it, his very first move on her',
-    'aftermath':    'the after — the calm and closeness right when it is over',
+    'challenge':   'a playful challenge — make him prove it or back up the big talk ("prove it", "think you can?")',
+    'raise_stakes':'raise the stakes as a game — go bigger than he promised, dare him to break a record',
+    'his_skill':   'curiosity about where his skill or confidence comes from — who taught him, his experience',
+    'tease_ego':   'tease his confidence or eagerness, warmly call his bluff, keep him chasing',
+    'anticipation':'the build-up and the wait — the almost, the tension before anything happens',
+    'her_effect':  'the effect he is having on her right now, said with wit — never clinical body detail',
 }
 
 
@@ -303,11 +303,17 @@ WOMAN_PERSONA_SYSTEM = (
     "- She carries LIGHTNESS, not weight. Go deep or tender ONLY when HE is deep (his loss, his "
     "struggle) or HE directly asks about you. Her default is warm, secure, buoyant, wanted — and "
     "she knows it.\n"
-    "- When HE gets explicit or graphic, MATCH him: give a direct, specific, dirty reply in his "
-    "own register — say what you want or what you'd do to him, as graphic as he is. Do NOT retreat "
-    "to coy teasing, a vague 'what's your move?', or making him 'earn it' when he is already "
-    "explicit. Teasing and holding back are for the lower registers; at full heat, give him the "
-    "real thing.\n"
+    "- When HE gets explicit, stay HOT but be PLAYFUL and WITTY, not graphic — the sexiest reply "
+    "engages his exact claim and turns it into a GAME, never a body-part description from you. "
+    "Grab what he actually said (tasting you, fucking you, giving you orgasms, his skills) and pick "
+    "one: (a) a playful CHALLENGE / raise the stakes — 'big talk', 'prove it', 'think you can back "
+    "that up?', 'want to break the record?'; (b) CURIOSITY about his skill or experience — 'where'd "
+    "you pick that up?', 'who taught you?', 'added any new skills since your last woman?'; (c) tease "
+    "his confidence or eagerness. Suggestive, charged, confident — but SHE stays clever, not "
+    "clinical or graphic. This keeps it hotter than describing body parts, and it's how real women "
+    "keep him chasing. NEVER react with 'straight for it', 'no hesitation', 'jump right in', 'no "
+    "warm-up', or 'no manners', and NEVER ask 'what's the first spot/thing/place' or 'where do your "
+    "hands go first' — those are dead crutches.\n"
     "- Direct with a compliment when she means it, but she never gushes, rates him, or performs. "
     "Confidence over eagerness every time.\n"
     "- She catches threads he dropped and calls them back, so it feels personal, like she was "
@@ -1189,6 +1195,36 @@ def _has_filler_question(text: str) -> bool:
     return bool(_FILLER_QUESTION.search(text or ''))
 
 
+# The "he's so direct" reaction crutch — the model keeps opening explicit replies
+# with the same tic ("straight for it", "no hesitation", "jump right in").
+_DIRECTNESS_REACTION = re.compile(
+    r"\bstraight (?:for|to) it\b|\bno hesitation\b|\bjump(?:ing)? right in\b|\bdive (?:right )?in\b"
+    r"|\bno warm[\s-]?up\b|\bno warning at all\b|\bdon'?t (?:you )?ease in\b|\bno manners\b"
+    r"|\bnot one to ease\b|\bstraight to the point\b|\bno beating around\b|\bwaste no time\b",
+    re.IGNORECASE,
+)
+
+
+def _has_directness_reaction(text: str) -> bool:
+    return bool(_DIRECTNESS_REACTION.search(text or ''))
+
+
+# The "what's the first spot / where do your hands go first" question crutch —
+# the single most overused explicit question. Force variety.
+_FIRST_X_QUESTION = re.compile(
+    r"\bwhat'?s the first (?:spot|thing|place|move|part|stop)\b"
+    r"|\bwhere (?:do|would|are) (?:your |you )?(?:hands?|mouth|lips|tongue|fingers?)?\s*(?:go|going|land|start)\w*\s+first\b"
+    r"|\bwhat would you do first\b|\bwhat'?s the first thing you'?d\b"
+    r"|\bwhere (?:do|would|are) you (?:start|starting|begin)\w*\s*(?:first)?\b"
+    r"|\bwhat (?:do|would) you (?:want|do) first\b|\bfirst (?:move|thing) (?:gonna be|going to be)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_first_x_question(text: str) -> bool:
+    return bool(_FIRST_X_QUESTION.search(text or ''))
+
+
 def _reply_violations(text: str) -> list:
     """
     Code-level enforcement of every rule the prompt states — prompt-only
@@ -1222,6 +1258,10 @@ def _reply_violations(text: str) -> list:
         v.append("leading / meeting-affirming ('when we get together', 'if I showed up') — imagine with 'if', never promise a meeting")
     if _has_filler_question(text):
         v.append("low-content filler question ('what's running through your head', 'what's your move') — ask something specific to HIM")
+    if _has_directness_reaction(text):
+        v.append("overused directness reaction ('straight for it', 'no hesitation', 'jump right in') — react a fresh way")
+    if _has_first_x_question(text):
+        v.append("overused 'what's the first spot/thing / where do your hands go first' question — turn it into a witty challenge or curiosity instead")
     if _GRIN_AT_DEVICE.search(text):
         v.append("grinning/smiling at her phone/screen/his name, or 'like an idiot/fool' — banned")
     if _has_overused_frame(text):
