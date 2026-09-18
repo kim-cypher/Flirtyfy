@@ -1186,6 +1186,8 @@ _FILLER_QUESTION = re.compile(
     r"what'?s\s+running\s+through\s+your\s+(?:head|mind)"
     r"|what\s+would\s+you\s+do\s+if\s+i\s+told\s+you\s+(?:what|exactly\s+what)\s+i'?m\s+thinking"
     r"|what'?s\s+on\s+your\s+mind\s+(?:about\s+this\s+)?right\s+now"
+    r"|what\s+are\s+you\s+thinking\s+(?:about\s+)?right\s+now"
+    r"|what'?s\s+got\s+you\s+so\s+(?:worked\s+up|interested)\s+right\s+now"
     r"|what'?s\s+your\s+move(?:\s+gonna\s+be)?\s*\??\s*$",
     re.IGNORECASE,
 )
