@@ -1955,7 +1955,7 @@ def generate_context_aware_response(
         instruction = _MEETING_PULL_INSTR
     elif escalation_found:
         instruction = _MEETING_REFRAME_INSTR
-    elif _his_question:
+    elif _his_question and topic != 'intimacy':
         instruction = (
             "He ASKED you something: \"" + _his_question + "\". PRIORITY: answer it first — briefly "
             "and specifically in her voice. A getting-to-know question (food, work, where she's "
@@ -1998,6 +1998,7 @@ def generate_context_aware_response(
     move_name = 'none'
     move_block = ''
     special_path = (meeting_pressure or meeting_doubt or meeting_thin or escalation_found
+                    or (_his_question and topic != 'intimacy')
                     or bot_accused or _has_rejection(conversation))
     if not special_path:
         move_name, move_text = _select_flirt_move(user_id, topic)
